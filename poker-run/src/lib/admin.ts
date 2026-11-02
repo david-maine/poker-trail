@@ -14,6 +14,7 @@ type AdminProfileRow = {
 type AdminEventRow = {
   id: string;
   slug: string;
+  event_code: string;
   name: string;
   description: string | null;
   status: EventStatus;
@@ -39,10 +40,6 @@ type AdminWaypointRow = {
   updated_at: string;
 };
 
-type AppSettingsRow = {
-  current_event_id: string | null;
-};
-
 type AdminRunRow = {
   event_id: string;
   status: "active" | "completed" | "abandoned";
@@ -58,6 +55,7 @@ export type AdminProfile = {
 export type AdminEvent = {
   id: string;
   slug: string;
+  eventCode: string;
   name: string;
   description: string | null;
   status: EventStatus;
@@ -98,7 +96,6 @@ export type AdminDashboard = {
   profile: AdminProfile;
   events: AdminEvent[];
   waypoints: AdminWaypoint[];
-  currentEventId: string | null;
   summaries: Record<string, EventSummary>;
 };
 
@@ -117,7 +114,7 @@ export type AdminWaypointInput = {
 };
 
 const eventSelect =
-  "id, slug, name, description, status, starts_at, ends_at, created_at, updated_at";
+  "id, slug, event_code, name, description, status, starts_at, ends_at, created_at, updated_at";
 
 const waypointSelect =
   "id, event_id, code, name, latitude, longitude, radius_meters, sort_order, proof_type, proof_value, is_active, created_at, updated_at";
@@ -177,7 +174,7 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     throw new Error("This account is not an event admin.");
   }
 
-  const [eventsResult, waypointsResult, runsResult, settingsResult] = await Promise.all([
+  const [eventsResult, waypointsResult, runsResult] = await Promise.all([
     supabase
       .from("events")
       .select(eventSelect)
@@ -191,11 +188,6 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     supabase
       .from("runs")
       .select("event_id, status, visit_count"),
-    supabase
-      .from("app_settings")
-      .select("current_event_id")
-      .eq("id", true)
-      .maybeSingle(),
   ]);
 
   if (eventsResult.error) {
@@ -210,44 +202,37 @@ export async function loadAdminDashboard(): Promise<AdminDashboard> {
     throw runsResult.error;
   }
 
-  if (settingsResult.error) {
-    throw settingsResult.error;
-  }
-
   const events = ((eventsResult.data as AdminEventRow[] | null) ?? []).map(mapEventRow);
   const waypoints = ((waypointsResult.data as AdminWaypointRow[] | null) ?? []).map(mapWaypointRow);
   const runs = (runsResult.data as AdminRunRow[] | null) ?? [];
-  const currentEventId =
-    ((settingsResult.data as AppSettingsRow | null) ?? null)?.current_event_id ?? null;
 
   return {
     session: authState.session,
     profile: authState.profile,
     events,
     waypoints,
-    currentEventId,
     summaries: buildSummaries(events, waypoints, runs),
   };
 }
 
-export async function setCurrentAdminEvent(eventId: string) {
-  const { error } = await supabase
-    .from("app_settings")
-    .upsert(
-      {
-        id: true,
-        current_event_id: eventId,
-      },
-      {
-        onConflict: "id",
-      }
-    )
-    .select("current_event_id")
+export async function setAdminEventActive(
+  eventId: string,
+  isActive: boolean
+): Promise<AdminEvent> {
+  const { data, error } = await supabase
+    .from("events")
+    .update({
+      status: isActive ? "active" : "closed",
+    })
+    .eq("id", eventId)
+    .select(eventSelect)
     .single();
 
   if (error) {
     throw error;
   }
+
+  return mapEventRow(data as AdminEventRow);
 }
 
 export async function saveAdminEvent(input: AdminEventInput): Promise<AdminEvent> {
@@ -320,7 +305,9 @@ export async function saveAdminWaypoint(input: AdminWaypointInput): Promise<Admi
 
   const query = input.id
     ? supabase.from("waypoints").update(payload).eq("id", input.id)
-    : supabase.from("waypoints").insert(payload);
+    : supabase.from("waypoints").upsert(payload, {
+        onConflict: "event_id,code",
+      });
 
   const { data, error } = await query.select(waypointSelect).single();
 
@@ -401,6 +388,7 @@ function mapEventRow(row: AdminEventRow): AdminEvent {
   return {
     id: row.id,
     slug: row.slug,
+    eventCode: row.event_code,
     name: row.name,
     description: row.description,
     status: row.status,

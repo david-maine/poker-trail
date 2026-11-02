@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { router, Tabs } from "expo-router";
+import { Href, router, Tabs } from "expo-router";
 
 import LoadingScreen from "../../src/components/LoadingScreen";
 import { useEventSession } from "../../src/lib/eventSession";
@@ -26,7 +26,7 @@ export default function TabLayout() {
         }
 
         if (!registrationState.event) {
-          setReady(true);
+          router.replace("/event-code" as Href);
           return;
         }
 

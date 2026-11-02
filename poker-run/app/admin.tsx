@@ -20,7 +20,7 @@ import {
   loadAdminDashboard,
   saveAdminEvent,
   saveAdminWaypoint,
-  setCurrentAdminEvent,
+  setAdminEventActive,
   signInAdmin,
   signOutAdmin,
 } from "../src/lib/admin";
@@ -63,7 +63,7 @@ export default function AdminScreen() {
   const [loading, setLoading] = useState(true);
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingWaypoint, setSavingWaypoint] = useState(false);
-  const [settingCurrentEventId, setSettingCurrentEventId] = useState<string | null>(null);
+  const [togglingEventStatusId, setTogglingEventStatusId] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -96,7 +96,6 @@ export default function AdminScreen() {
         }
 
         const nextSelectedId =
-          nextDashboard.currentEventId ??
           nextDashboard.events.find((event) => event.status === "active")?.id ??
           nextDashboard.events[0]?.id ??
           null;
@@ -164,7 +163,6 @@ export default function AdminScreen() {
       const nextSelectedId =
         preferredEventId ??
         selectedEventId ??
-        nextDashboard.currentEventId ??
         nextDashboard.events.find((event) => event.status === "active")?.id ??
         nextDashboard.events[0]?.id ??
         null;
@@ -269,19 +267,24 @@ export default function AdminScreen() {
     }
   }
 
-  async function handleSetCurrentEvent(event: AdminEvent) {
-    setSettingCurrentEventId(event.id);
+  async function handleToggleEventActive(event: AdminEvent) {
+    const shouldActivate = event.status !== "active";
+    setTogglingEventStatusId(event.id);
     setErrorMessage(null);
     setMessage(null);
 
     try {
-      await setCurrentAdminEvent(event.id);
-      setMessage(`Current event set to ${event.name}.`);
+      const saved = await setAdminEventActive(event.id, shouldActivate);
+      setMessage(
+        shouldActivate
+          ? `${saved.name} is now active.`
+          : `${saved.name} is now closed.`
+      );
       await refreshDashboard(false, event.id);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to set the current event."));
+      setErrorMessage(getErrorMessage(error, "Unable to update the event status."));
     } finally {
-      setSettingCurrentEventId(null);
+      setTogglingEventStatusId(null);
     }
   }
 
@@ -416,7 +419,8 @@ export default function AdminScreen() {
               dashboard.events.map((event) => {
                 const summary = dashboard.summaries[event.id];
                 const isSelected = event.id === selectedEventId;
-                const isCurrent = event.id === dashboard.currentEventId;
+                const isActive = event.status === "active";
+                const isTogglingStatus = togglingEventStatusId === event.id;
 
                 return (
                   <Pressable
@@ -428,30 +432,27 @@ export default function AdminScreen() {
                   >
                     <View style={styles.eventCardTop}>
                       <Text style={styles.eventName}>{event.name}</Text>
-                      {isCurrent ? (
-                        <View style={styles.currentBadge}>
-                          <Text style={styles.currentBadgeText}>Current</Text>
-                        </View>
-                      ) : null}
+                      <StatusBadge status={event.status} />
                     </View>
+                    <Text style={styles.eventCodeText}>Code {event.eventCode}</Text>
                     <View style={styles.metricRow}>
                       <Metric label="Stops" value={summary?.waypointCount ?? 0} />
                     </View>
                     <View style={styles.eventActions}>
                       <ActionButton
-                        disabled={isCurrent || settingCurrentEventId !== null}
-                        icon={isCurrent ? "check-circle" : "radio"}
+                        disabled={togglingEventStatusId !== null}
+                        icon={isActive ? "toggle-right" : "toggle-left"}
                         label={
-                          settingCurrentEventId === event.id
-                            ? "Setting..."
-                            : isCurrent
-                              ? "Current"
-                              : "Set current"
+                          isTogglingStatus
+                            ? "Updating..."
+                            : isActive
+                              ? "Deactivate"
+                              : "Activate"
                         }
                         onPress={() => {
-                          void handleSetCurrentEvent(event);
+                          void handleToggleEventActive(event);
                         }}
-                        variant={isCurrent ? "ghost" : "secondary"}
+                        variant={isActive ? "ghost" : "secondary"}
                       />
                     </View>
                   </Pressable>
@@ -464,18 +465,40 @@ export default function AdminScreen() {
         <ScrollView contentContainerStyle={styles.detailScroll} style={styles.detailPane}>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                {eventForm.id ? "Event Details" : "New Event"}
-              </Text>
-              <ActionButton
-                disabled={savingEvent}
-                icon="save"
-                label={savingEvent ? "Saving..." : "Save event"}
-                onPress={() => {
-                  void handleSaveEvent();
-                }}
-                variant="primary"
-              />
+              <View style={styles.sectionTitleGroup}>
+                <Text style={styles.sectionTitle}>
+                  {eventForm.id ? "Event Details" : "New Event"}
+                </Text>
+                {selectedEvent ? <StatusBadge status={selectedEvent.status} /> : null}
+              </View>
+              <View style={styles.sectionActions}>
+                {selectedEvent ? (
+                  <ActionButton
+                    disabled={togglingEventStatusId !== null}
+                    icon={selectedEvent.status === "active" ? "toggle-right" : "toggle-left"}
+                    label={
+                      togglingEventStatusId === selectedEvent.id
+                        ? "Updating..."
+                        : selectedEvent.status === "active"
+                          ? "Deactivate"
+                          : "Activate"
+                    }
+                    onPress={() => {
+                      void handleToggleEventActive(selectedEvent);
+                    }}
+                    variant={selectedEvent.status === "active" ? "ghost" : "secondary"}
+                  />
+                ) : null}
+                <ActionButton
+                  disabled={savingEvent}
+                  icon="save"
+                  label={savingEvent ? "Saving..." : "Save event"}
+                  onPress={() => {
+                    void handleSaveEvent();
+                  }}
+                  variant="primary"
+                />
+              </View>
             </View>
 
             <Field label="Name">
@@ -489,6 +512,16 @@ export default function AdminScreen() {
                 value={eventForm.name}
               />
             </Field>
+
+            {selectedEvent ? (
+              <Field label="Event code">
+                <View style={styles.readOnlyCode}>
+                  <Text selectable style={styles.readOnlyCodeText}>
+                    {selectedEvent.eventCode}
+                  </Text>
+                </View>
+              </Field>
+            ) : null}
           </View>
 
           {selectedEvent ? (
@@ -670,6 +703,18 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
+function StatusBadge({ status }: { status: AdminEvent["status"] }) {
+  const isActive = status === "active";
+
+  return (
+    <View style={[styles.statusBadge, isActive ? styles.statusBadgeActive : styles.statusBadgeClosed]}>
+      <Text style={[styles.statusBadgeText, isActive ? styles.statusBadgeTextActive : null]}>
+        {isActive ? "Active" : "Closed"}
+      </Text>
+    </View>
+  );
+}
+
 function eventToForm(event: AdminEvent): EventFormState {
   return {
     id: event.id,
@@ -700,6 +745,10 @@ function createEmptyWaypointForm(eventId: string, slotIndex = 0): WaypointFormSt
 }
 
 function parseNumber(value: string, label: string) {
+  if (!value.trim()) {
+    throw new Error(`${label} is required.`);
+  }
+
   const parsed = Number(value);
 
   if (!Number.isFinite(parsed)) {
@@ -710,6 +759,10 @@ function parseNumber(value: string, label: string) {
 }
 
 function parseInteger(value: string, label: string) {
+  if (!value.trim()) {
+    throw new Error(`${label} is required.`);
+  }
+
   const parsed = Number(value);
 
   if (!Number.isInteger(parsed)) {
@@ -820,6 +873,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
   },
+  eventCodeText: {
+    color: "#0f766e",
+    fontSize: 13,
+    fontWeight: "900",
+    marginTop: 8,
+  },
   detailPane: {
     flex: 1,
   },
@@ -840,6 +899,19 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between",
     marginBottom: 14,
+  },
+  sectionActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    justifyContent: "flex-end",
+  },
+  sectionTitleGroup: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
   },
   sectionTitle: {
     color: "#111827",
@@ -879,6 +951,23 @@ const styles = StyleSheet.create({
     minHeight: 42,
     paddingHorizontal: 12,
     paddingVertical: 9,
+  },
+  readOnlyCode: {
+    alignItems: "flex-start",
+    backgroundColor: "#eef8f5",
+    borderColor: "#0f766e",
+    borderRadius: 6,
+    borderWidth: 1,
+    minHeight: 42,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  readOnlyCodeText: {
+    color: "#0f766e",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 0,
   },
   metricRow: {
     flexDirection: "row",
@@ -989,18 +1078,27 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.62,
   },
-  currentBadge: {
-    backgroundColor: "#ccfbf1",
-    borderColor: "#0f766e",
+  statusBadge: {
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  currentBadgeText: {
-    color: "#0f766e",
+  statusBadgeActive: {
+    backgroundColor: "#ccfbf1",
+    borderColor: "#0f766e",
+  },
+  statusBadgeClosed: {
+    backgroundColor: "#f3f4f6",
+    borderColor: "#9ca3af",
+  },
+  statusBadgeText: {
+    color: "#4b5563",
     fontSize: 11,
     fontWeight: "900",
+  },
+  statusBadgeTextActive: {
+    color: "#0f766e",
   },
   successText: {
     backgroundColor: "#dcfce7",

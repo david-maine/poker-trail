@@ -1,8 +1,9 @@
-import { router } from "expo-router";
+import { Href, router } from "expo-router";
 import { useEffect, useState } from "react";
 import { ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import LoadingScreen from "../src/components/LoadingScreen";
+import LeaveEventButton from "../src/components/LeaveEventButton";
 import { useEventSession } from "../src/lib/eventSession";
 import { registerVesselNameForEvent } from "../src/lib/game";
 
@@ -14,7 +15,12 @@ export default function RegisterScreen() {
   const event = registrationState.event;
 
   useEffect(() => {
-    if (!event || registrationState.isRegistered) {
+    if (!event) {
+      router.replace("/event-code" as Href);
+      return;
+    }
+
+    if (registrationState.isRegistered) {
       router.replace("/(tabs)");
     }
   }, [event, registrationState.isRegistered]);
@@ -45,6 +51,7 @@ export default function RegisterScreen() {
   return (
     <View style={styles.backgroundContainer}>
     {/* <SafeAreaView style={styles.backgroundContainer} edges={["top"]}> */}
+    <LeaveEventButton style={styles.leaveButton} />
     <ImageBackground
       source={require("../assets/images/landingpage.png")}
       style={styles.background}
@@ -74,7 +81,7 @@ export default function RegisterScreen() {
               value={vesselName}
             />
 
-            {/* {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null} */}
+            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
             <Pressable
               accessibilityLabel={submitting ? "Saving vessel name" : "Set sail"}
@@ -124,6 +131,12 @@ const styles = StyleSheet.create({
   backgroundContainer: {
     flex: 1,
     backgroundColor: "#25292e",
+  },
+  leaveButton: {
+    position: "absolute",
+    right: 18,
+    top: 48,
+    zIndex: 5,
   },
   background: {
     flex: 1,

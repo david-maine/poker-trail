@@ -606,14 +606,53 @@
 
     const PROXIMITY_THRESHOLD_METERS = 150;
 
+    function cardFromCode(code) {
+      const suitMap = {
+        S: "♠",
+        H: "♥",
+        D: "♦",
+        C: "♣"
+      };
+      return {
+        rank: code.slice(0, -1),
+        suit: suitMap[code.slice(-1)]
+      };
+    }
+
+    function createTestLeaderboardEntry(boatName, cardCodes) {
+      const cards = cardCodes.map(cardFromCode);
+      return {
+        id: `test-${boatName}`,
+        boatName,
+        cards,
+        eval: evaluateHandDetailed(cards)
+      };
+    }
+
+    function createTestLeaderboardEntries() {
+      const entries = [
+        createTestLeaderboardEntry("River Queen", ["9H", "10H", "JH", "QH", "KH"]),
+        createTestLeaderboardEntry("The Long Way Home", ["AS", "AH", "AD", "AC", "7D"]),
+        createTestLeaderboardEntry("Saltwater Social Club", ["KS", "KH", "KC", "9S", "9C"]),
+        createTestLeaderboardEntry("Current Crew With A Very Long Name", ["2D", "6D", "8D", "JD", "QD"]),
+        createTestLeaderboardEntry("Waypoint Wanderers", ["5S", "6C", "7H", "8S", "9D"]),
+        createTestLeaderboardEntry("Portside Pair", ["QS", "QH", "QC", "4C", "2S"]),
+        createTestLeaderboardEntry("Marina Mates", ["JS", "JH", "8C", "8H", "3D"]),
+        createTestLeaderboardEntry("Buoy Bandits", ["10S", "10C", "AH", "7C", "5D"]),
+        createTestLeaderboardEntry("Anchor Management", ["AS", "JD", "9C", "6H", "2C"]),
+        createTestLeaderboardEntry("Late Starter", ["KD", "10H", "8S", "4C", "3D"])
+      ];
+      return entries.sort((a, b) => compareHands(a.eval, b.eval));
+    }
+
     // ---- App state ----
     let deck = [];
     let waypointCards = new Array(5).fill(null); // card per waypoint
     let numDealt = 0;
     let gpsWatchId = null;
     let waypointCoords = new Array(5).fill(null); // {lat, lon} or null
-    let leaderboardEntries = [];
-    let nextBoatNumber = 1;
+    let leaderboardEntries = createTestLeaderboardEntries();
+    let nextBoatNumber = leaderboardEntries.length + 1;
 
     const waypointsContainer = document.getElementById("waypoints");
     const dealBtn = document.getElementById("dealBtn");
@@ -647,14 +686,14 @@
         latInput.step = "0.000001";
         latInput.placeholder = "Latitude";
         latInput.className = "waypoint-input";
-        latInput.id = \`wp-lat-\${i}\`;
+        latInput.id = `wp-lat-${i}`;
 
         const lonInput = document.createElement("input");
         lonInput.type = "number";
         lonInput.step = "0.000001";
         lonInput.placeholder = "Longitude";
         lonInput.className = "waypoint-input";
-        lonInput.id = \`wp-lon-\${i}\`;
+        lonInput.id = `wp-lon-${i}`;
 
         const buttonCol = document.createElement("div");
         const useCurrentBtn = document.createElement("button");
@@ -688,7 +727,7 @@
     }
 
     function updateWaypointCardDisplay(index) {
-      const el = document.getElementById(\`waypoint-card-\${index}\`);
+      const el = document.getElementById(`waypoint-card-${index}`);
       const card = waypointCards[index];
       if (card) {
         el.textContent = cardToString(card);
@@ -701,8 +740,8 @@
 
     function readWaypointCoordsFromInputs() {
       for (let i = 0; i < 5; i++) {
-        const latInput = document.getElementById(\`wp-lat-\${i}\`);
-        const lonInput = document.getElementById(\`wp-lon-\${i}\`);
+        const latInput = document.getElementById(`wp-lat-${i}`);
+        const lonInput = document.getElementById(`wp-lon-${i}`);
         const lat = parseFloat(latInput.value);
         const lon = parseFloat(lonInput.value);
         if (!isNaN(lat) && !isNaN(lon)) {
@@ -718,19 +757,19 @@
         gpsStatusEl.textContent = "Geolocation is not supported on this device.";
         return;
       }
-      gpsStatusEl.textContent = \`Grabbing current position for waypoint \${index + 1}...\`;
+      gpsStatusEl.textContent = `Grabbing current position for waypoint ${index + 1}...`;
       navigator.geolocation.getCurrentPosition(
         pos => {
           const { latitude, longitude } = pos.coords;
-          const latInput = document.getElementById(\`wp-lat-\${index}\`);
-          const lonInput = document.getElementById(\`wp-lon-\${index}\`);
+          const latInput = document.getElementById(`wp-lat-${index}`);
+          const lonInput = document.getElementById(`wp-lon-${index}`);
           latInput.value = latitude.toFixed(6);
           lonInput.value = longitude.toFixed(6);
           waypointCoords[index] = { lat: latitude, lon: longitude };
-          gpsStatusEl.textContent = \`Waypoint \${index + 1} set to current position.\`;
+          gpsStatusEl.textContent = `Waypoint ${index + 1} set to current position.`;
         },
         err => {
-          gpsStatusEl.textContent = \`Could not get location: \${err.message}\`;
+          gpsStatusEl.textContent = `Could not get location: ${err.message}`;
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
       );
@@ -754,7 +793,7 @@
       dealBtn.disabled = false;
 
       if (!boatNameInput.value.trim()) {
-        boatNameInput.value = \`Boat \${nextBoatNumber}\`;
+        boatNameInput.value = `Boat ${nextBoatNumber}`;
       }
 
       if (gpsWatchId !== null) {
@@ -780,9 +819,9 @@
       updateWaypointCardDisplay(index);
 
       if (source === "gps") {
-        statusEl.textContent = \`Card dealt for waypoint \${index + 1} (GPS hit).\`;
+        statusEl.textContent = `Card dealt for waypoint ${index + 1} (GPS hit).`;
       } else {
-        statusEl.textContent = \`Card dealt for waypoint \${index + 1} (manual).\`;
+        statusEl.textContent = `Card dealt for waypoint ${index + 1} (manual).`;
       }
 
       if (numDealt === 5) {
@@ -812,7 +851,7 @@
       if (cards.length !== 5) return;
 
       const evalResult = evaluateHandDetailed(cards);
-      handTitleEl.textContent = \`Current hand: \${evalResult.name}\`;
+      handTitleEl.textContent = `Current hand: ${evalResult.name}`;
       handCardsEl.innerHTML = "";
       cards.forEach(card => {
         const chip = document.createElement("div");
@@ -852,7 +891,7 @@
           handleGpsUpdate(latitude, longitude, accuracy);
         },
         err => {
-          gpsStatusEl.textContent = \`GPS error: \${err.message}\`;
+          gpsStatusEl.textContent = `GPS error: ${err.message}`;
           startGpsBtn.disabled = false;
           stopGpsBtn.disabled = true;
         },
@@ -887,11 +926,11 @@
       }
 
       if (closestIndex === -1 || closestDistance === Infinity) {
-        gpsStatusEl.textContent = \`GPS ok (±\${Math.round(accuracy)} m). No undealt waypoint nearby.\`;
+        gpsStatusEl.textContent = `GPS ok (±${Math.round(accuracy)} m). No undealt waypoint nearby.`;
         return;
       }
 
-      gpsStatusEl.textContent = \`Closest undealt waypoint: \${closestIndex + 1} at ~\${Math.round(closestDistance)} m (GPS ±\${Math.round(accuracy)} m).\`;
+      gpsStatusEl.textContent = `Closest undealt waypoint: ${closestIndex + 1} at ~${Math.round(closestDistance)} m (GPS ±${Math.round(accuracy)} m).`;
 
       if (closestDistance <= PROXIMITY_THRESHOLD_METERS && numDealt < 5) {
         dealCardForWaypoint(closestIndex, "gps");
@@ -908,7 +947,7 @@
 
       const evalResult = evaluateHandDetailed(cards);
       const nameRaw = boatNameInput.value.trim();
-      const boatName = nameRaw || \`Boat \${nextBoatNumber}\`;
+      const boatName = nameRaw || `Boat ${nextBoatNumber}`;
 
       const entry = {
         id: Date.now() + Math.random(),
@@ -924,7 +963,7 @@
 
       // prepare for next boat
       nextBoatNumber++;
-      boatNameInput.value = \`Boat \${nextBoatNumber}\`;
+      boatNameInput.value = `Boat ${nextBoatNumber}`;
       saveHandBtn.disabled = true;
     }
 
@@ -954,7 +993,7 @@
 
         const rankLabel = document.createElement("div");
         rankLabel.className = "leader-rank-label";
-        rankLabel.textContent = index === 0 ? "Currently winning" : \`Rank #\${index + 1}\`;
+        rankLabel.textContent = index === 0 ? "Currently winning" : `Rank #${index + 1}`;
 
         top.appendChild(boatSpan);
         top.appendChild(rankLabel);

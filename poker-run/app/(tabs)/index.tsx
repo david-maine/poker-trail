@@ -4,6 +4,7 @@ import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native
 
 import MapDisplay from "../../components/MapDisplay";
 import CardRow from "../../src/components/CardRow";
+import LeaveEventButton from "../../src/components/LeaveEventButton";
 import LoadingScreen from "../../src/components/LoadingScreen";
 import useLocation from "../../src/hooks/useLocation";
 import { addConnectivityListener, fetchIsUsableConnection } from "../../src/lib/connectivity";
@@ -32,7 +33,7 @@ type SubmitOptions = {
 };
 
 export default function Index() {
-  const { location, errorMsg } = useLocation();
+  const { location, heading, errorMsg } = useLocation();
   const { registrationState } = useEventSession();
 
   const [event, setEvent] = useState<GameEvent | null>(null);
@@ -352,6 +353,7 @@ export default function Index() {
   if (!event || waypoints.length === 0 || !hand) {
     return (
       <View style={styles.container}>
+        <LeaveEventButton style={styles.leaveButton} />
         <Text style={styles.errorText}>
           {screenError ?? "No active event is configured in Supabase yet."}
         </Text>
@@ -369,6 +371,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
+      <LeaveEventButton style={styles.leaveButton} />
       <View style={styles.map}>
         <MapDisplay
           waypoints={waypoints}
@@ -376,6 +379,7 @@ export default function Index() {
           userLocation={{
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
+            heading: heading ?? location.coords.heading,
           }}
         />
 
@@ -450,6 +454,12 @@ const styles = StyleSheet.create({
     width: "100%",
     flex: 1,
     position: "relative",
+  },
+  leaveButton: {
+    position: "absolute",
+    right: 18,
+    top: 48,
+    zIndex: 5,
   },
   controlsArea: {
     width: "100%",

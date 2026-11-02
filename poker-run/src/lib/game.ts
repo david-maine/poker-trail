@@ -6,17 +6,15 @@ import {
 
 import { evaluateBestHand } from "./cards";
 import { LocalCardClaim } from "./localHand";
+import { getSafeStorage } from "./safeStorage";
 import { supabase, supabaseAnonKey } from "./supabase";
 import { Waypoint } from "../types";
 
 type GameEventRow = {
   id: string;
   slug: string;
+  event_code: string;
   name: string;
-};
-
-type AppSettingsRow = {
-  current_event_id: string | null;
 };
 
 type WaypointRow = {
@@ -75,6 +73,7 @@ type HandSubmissionError = Error & {
 export type GameEvent = {
   id: string;
   slug: string;
+  eventCode: string;
   name: string;
 };
 
@@ -115,8 +114,10 @@ export type RegistrationState = {
   requiresRegistration: boolean;
 };
 
+const SELECTED_EVENT_STORAGE_KEY = "poker-run:selected-event-id:v1";
+
 export async function loadRegistrationState(): Promise<RegistrationState> {
-  const event = await fetchActiveEvent();
+  const event = await fetchSavedActiveEvent();
   const user = (await getSessionUser()) ?? null;
 
   if (!event) {
@@ -139,6 +140,41 @@ export async function loadRegistrationState(): Promise<RegistrationState> {
     vesselName,
     isRegistered,
     requiresRegistration: !isRegistered,
+  };
+}
+
+export async function loadRegistrationStateForEventCode(
+  eventCode: string
+): Promise<RegistrationState> {
+  const normalizedCode = normalizeEventCode(eventCode);
+
+  if (!normalizedCode) {
+    throw new Error("Event code is required.");
+  }
+
+  if (!/^[A-Z0-9]{6}$/.test(normalizedCode)) {
+    throw new Error("Event code must be 6 letters or numbers.");
+  }
+
+  const event = await fetchActiveEventByCode(normalizedCode);
+
+  if (!event) {
+    throw new Error("No active event was found for that code.");
+  }
+
+  await getSafeStorage().setItem(SELECTED_EVENT_STORAGE_KEY, event.id);
+  return loadRegistrationStateForEvent(event);
+}
+
+export async function leaveCurrentEvent(): Promise<RegistrationState> {
+  await getSafeStorage().removeItem(SELECTED_EVENT_STORAGE_KEY);
+
+  return {
+    event: null,
+    currentUserId: null,
+    vesselName: null,
+    isRegistered: true,
+    requiresRegistration: false,
   };
 }
 
@@ -407,28 +443,32 @@ function createHandSubmissionError(
   return error;
 }
 
-async function fetchActiveEvent(): Promise<GameEvent | null> {
-  const { data: settingsData, error: settingsError } = await supabase
-    .from("app_settings")
-    .select("current_event_id")
-    .eq("id", true)
-    .maybeSingle();
+async function loadRegistrationStateForEvent(event: GameEvent): Promise<RegistrationState> {
+  const user = (await getSessionUser()) ?? null;
+  const run = user ? await fetchRegistrationRun(event.id, user.id) : null;
+  const vesselName = normalizeVesselName(run?.display_name ?? null);
+  const isRegistered = vesselName !== null;
 
-  if (settingsError) {
-    throw settingsError;
-  }
+  return {
+    event,
+    currentUserId: user?.id ?? null,
+    vesselName,
+    isRegistered,
+    requiresRegistration: !isRegistered,
+  };
+}
 
-  const currentEventId =
-    (settingsData as AppSettingsRow | null)?.current_event_id ?? null;
+async function fetchSavedActiveEvent(): Promise<GameEvent | null> {
+  const selectedEventId = await getSafeStorage().getItem(SELECTED_EVENT_STORAGE_KEY);
 
-  if (!currentEventId) {
+  if (!selectedEventId) {
     return null;
   }
 
   const { data, error } = await supabase
     .from("events")
-    .select("id, slug, name")
-    .eq("id", currentEventId)
+    .select("id, slug, event_code, name")
+    .eq("id", selectedEventId)
     .eq("status", "active")
     .maybeSingle();
 
@@ -437,13 +477,29 @@ async function fetchActiveEvent(): Promise<GameEvent | null> {
   }
 
   const row = data as GameEventRow | null;
-  return row
-    ? {
-        id: row.id,
-        slug: row.slug,
-        name: row.name,
-      }
-    : null;
+
+  if (!row) {
+    await getSafeStorage().removeItem(SELECTED_EVENT_STORAGE_KEY);
+    return null;
+  }
+
+  return mapGameEventRow(row);
+}
+
+async function fetchActiveEventByCode(eventCode: string): Promise<GameEvent | null> {
+  const { data, error } = await supabase
+    .from("events")
+    .select("id, slug, event_code, name")
+    .eq("event_code", eventCode)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  const row = data as GameEventRow | null;
+  return row ? mapGameEventRow(row) : null;
 }
 
 async function fetchWaypoints(eventId: string): Promise<Waypoint[]> {
@@ -486,6 +542,19 @@ async function fetchRegistrationRun(
   }
 
   return (data as RegistrationRunRow | null) ?? null;
+}
+
+function mapGameEventRow(row: GameEventRow): GameEvent {
+  return {
+    id: row.id,
+    slug: row.slug,
+    eventCode: row.event_code,
+    name: row.name,
+  };
+}
+
+function normalizeEventCode(value: string) {
+  return value.trim().replace(/\s+/g, "").toUpperCase();
 }
 
 function normalizeVesselName(value: string | null | undefined) {

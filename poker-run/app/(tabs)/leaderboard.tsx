@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
+import LeaveEventButton from "../../src/components/LeaveEventButton";
 import LoadingScreen from "../../src/components/LoadingScreen";
 import PlayingCard from "../../src/components/PlayingCard";
 import { useEventSession } from "../../src/lib/eventSession";
@@ -165,6 +166,7 @@ export default function LeaderboardScreen() {
   if (!leaderboardUnlocked) {
     return (
       <View style={styles.centered}>
+        <LeaveEventButton style={styles.leaveButton} />
         <Text style={styles.emptyTitle}>Submit your hand to unlock the leaderboard</Text>
         <Text style={styles.emptyText}>
           The leaderboard will appear after your hand has been accepted.
@@ -205,6 +207,7 @@ export default function LeaderboardScreen() {
 
   return (
     <View style={styles.container}>
+      <LeaveEventButton style={styles.leaveButton} />
       <ImageBackground
         source={require("../../assets/images/leaderboard-background.png")}
         style={styles.background}
@@ -516,6 +519,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
+  },
+  leaveButton: {
+    position: "absolute",
+    right: 18,
+    top: 48,
+    zIndex: 5,
   },
   background: {
     flex: 1,

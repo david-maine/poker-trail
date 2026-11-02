@@ -10,14 +10,16 @@ import { supabase } from "../src/lib/supabase";
 
 export default function RootLayout() {
   const segments = useSegments();
-  const isAdminRoute = segments[0] === "admin";
+  const isStandaloneRoute = segments[0] === "admin" || segments[0] === "organiser";
   const [ready, setReady] = useState(false);
-  const [initialRouteName, setInitialRouteName] = useState<"(tabs)" | "register" | null>(null);
+  const [initialRouteName, setInitialRouteName] = useState<
+    "(tabs)" | "event-code" | "register" | null
+  >(null);
   const [registrationState, setRegistrationState] = useState<RegistrationState | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isAdminRoute) {
+    if (isStandaloneRoute) {
       return;
     }
 
@@ -54,7 +56,11 @@ export default function RootLayout() {
         if (isMounted) {
           setRegistrationState(nextRegistrationState);
           setInitialRouteName(
-            nextRegistrationState.requiresRegistration ? "register" : "(tabs)"
+            !nextRegistrationState.event
+              ? "event-code"
+              : nextRegistrationState.requiresRegistration
+                ? "register"
+                : "(tabs)"
           );
           setReady(true);
         }
@@ -73,12 +79,13 @@ export default function RootLayout() {
     return () => {
       isMounted = false;
     };
-  }, [isAdminRoute]);
+  }, [isStandaloneRoute]);
 
-  if (isAdminRoute) {
+  if (isStandaloneRoute) {
     return (
       <Stack>
         <Stack.Screen name="admin" options={{ headerShown: false }} />
+        <Stack.Screen name="organiser" options={{ headerShown: false }} />
       </Stack>
     );
   }
@@ -100,6 +107,7 @@ export default function RootLayout() {
   return (
     <EventSessionProvider initialRegistrationState={registrationState}>
       <Stack initialRouteName={initialRouteName}>
+        <Stack.Screen name="event-code" options={{ headerShown: false }} />
         <Stack.Screen name="register" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>

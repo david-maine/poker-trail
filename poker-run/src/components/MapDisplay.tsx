@@ -2,7 +2,11 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { Waypoint } from "../types";
 
-type UserLocation = { latitude: number; longitude: number } | null;
+type UserLocation = {
+  latitude: number;
+  longitude: number;
+  heading?: number | null;
+} | null;
 
 type Props = {
   waypoints: Waypoint[];
@@ -17,7 +21,7 @@ export default function MapDisplay({ waypoints, visited, userLocation }: Props) 
         <Text style={styles.title}>Map preview unavailable on web</Text>
         <Text style={styles.meta}>
           {userLocation
-            ? `Current position ${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}`
+            ? `Current position ${userLocation.latitude.toFixed(5)}, ${userLocation.longitude.toFixed(5)}${formatHeading(userLocation.heading)}`
             : "Waiting for location"}
         </Text>
         <View style={styles.list}>
@@ -39,6 +43,14 @@ export default function MapDisplay({ waypoints, visited, userLocation }: Props) 
       </View>
     </View>
   );
+}
+
+function formatHeading(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "";
+  }
+
+  return ` | Facing ${Math.round(value % 360)} deg`;
 }
 
 const styles = StyleSheet.create({
