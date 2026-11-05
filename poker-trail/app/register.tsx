@@ -3,6 +3,7 @@ import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Me
 import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
 import { useFonts } from "expo-font";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -17,7 +18,7 @@ import {
   View,
 } from "react-native";
 
-import TrailBrandArtwork from "../src/components/TrailBrandArtwork";
+import TrailBrandArtwork, { ARTWORK_ASPECT_RATIO } from "../src/components/TrailBrandArtwork";
 import useResponsiveLayout from "../src/hooks/useResponsiveLayout";
 import LoadingScreen from "../src/components/LoadingScreen";
 import { useEventSession } from "../src/lib/eventSession";
@@ -26,6 +27,8 @@ import { getLandingTypography, LANDING_BUTTON_FONT, LANDING_INPUT_FONT } from ".
 
 export default function RegisterScreen() {
   const layout = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
+  const artworkSpacing = layout.gap * 2;
   // Keep the full viewport height when the keyboard reduces the available space.
   // A width change (including rotation) establishes a new responsive size.
   const artworkViewport = useRef({ width: layout.width, height: layout.height });
@@ -34,11 +37,12 @@ export default function RegisterScreen() {
   } else {
     artworkViewport.current.height = Math.max(artworkViewport.current.height, layout.height);
   }
-  const artworkWidth = Math.min(layout.contentWidth, 460, Math.max(160, artworkViewport.current.height * 0.58) * 1241 / 1750);
+  const artworkSidePadding = 16;
+  const artworkWidth = Math.max(1, Math.min(layout.contentWidth, 460, Math.max(160, artworkViewport.current.height * 0.58) * ARTWORK_ASPECT_RATIO) - artworkSidePadding * 2);
   const formWidth = Math.min(layout.contentWidth * 0.82, 380);
   const typography = getLandingTypography(formWidth, layout.fontScale);
   const controlHeight = Math.max(layout.fieldHeight, typography.minControlHeight);
-  const [fontsLoaded, fontError] = useFonts({ Montserrat_500Medium_Italic, RobotoSlab_800ExtraBold });
+  const [, fontError] = useFonts({ Montserrat_500Medium_Italic, RobotoSlab_800ExtraBold });
   const { registrationState, setRegistrationState } = useEventSession();
   const [eventCode, setEventCode] = useState(registrationState.event?.eventCode ?? "");
   const [vesselName, setVesselName] = useState("");
@@ -100,7 +104,7 @@ export default function RegisterScreen() {
     return <View style={[styles.backgroundContainer, styles.fontError]}><Text style={styles.errorText}>The page fonts could not load. Reload to try again.</Text></View>;
   }
 
-  if (!fontsLoaded || (registrationState.event && registrationState.isRegistered)) {
+  if (registrationState.event && registrationState.isRegistered) {
     return <LoadingScreen accessibilityLabel="Loading event" />;
   }
 
@@ -110,9 +114,9 @@ export default function RegisterScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.keyboardAvoidingContainer}
         >
-          <ScrollView contentContainerStyle={[styles.container, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: layout.controlTop, paddingBottom: layout.bottom }]} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={[styles.container, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: insets.top + artworkSpacing, paddingBottom: layout.bottom }]} keyboardShouldPersistTaps="handled">
             <View style={styles.card}>
-              <View style={{ marginBottom: layout.gap * 2 }}>
+              <View style={{ marginBottom: artworkSpacing * 2, paddingHorizontal: artworkSidePadding }}>
                 <TrailBrandArtwork width={artworkWidth} />
               </View>
               <View style={[styles.form, { width: formWidth }]}>
@@ -197,7 +201,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     paddingHorizontal: 24,
     paddingTop: 48,
     paddingBottom: 48,

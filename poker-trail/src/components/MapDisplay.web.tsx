@@ -1,6 +1,7 @@
 import { APP_BACKGROUND_COLOR } from "../lib/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
+import StatusPill from "./StatusPill";
 
 import { loadGoogleMaps } from "../lib/googleMaps.web";
 import type { GoogleWindow } from "../lib/googleMaps.web";
@@ -49,10 +50,9 @@ export default function MapDisplay(props: PlayerMapState) {
     <View style={styles.container}>
       <View accessibilityLabel="Event map" ref={mapNode} style={styles.map} />
       {loading || error ? (
-        <View style={[styles.message, { top: controls.top + controls.size + 16 }]}>
-          {loading ? <ActivityIndicator color="#ffffff" /> : null}
-          <Text accessibilityRole={error ? "alert" : undefined} style={styles.messageText}>{error ?? "Loading map…"}</Text>
-          {error ? <Pressable accessibilityRole="button" onPress={() => setAttempt(value => value + 1)} style={styles.retry}><Text style={styles.messageText}>Retry map</Text></Pressable> : null}
+        <View style={styles.message}>
+          <StatusPill message={error ?? "Loading map…"} loading={loading && !error} error={Boolean(error)}
+            onRetry={error ? () => setAttempt(value => value + 1) : undefined} retryLabel="Retry map" />
         </View>
       ) : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Recenter map on your location"
@@ -72,7 +72,5 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4, zIndex: 3 },
   pressed: { opacity: 0.78 },
   disabled: { opacity: 0.45 },
-  message: { position: "absolute", top: 120, left: 24, right: 24, alignItems: "center", gap: 12, padding: 20, backgroundColor: APP_BACKGROUND_COLOR, borderRadius: 8 },
-  messageText: { color: "#ffffff", fontSize: 15, textAlign: "center" },
-  retry: { borderWidth: 1, borderColor: "#ffffff", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 4 },
+  message: { position: "absolute", top: "50%", left: 24, right: 24, alignItems: "center", zIndex: 2 },
 });

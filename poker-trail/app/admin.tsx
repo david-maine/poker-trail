@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import LoadingScreen from "../src/components/LoadingScreen";
+import LoadingStatus from "../src/components/LoadingStatus";
 import {
   AdminDashboard,
   AdminEvent,
@@ -321,8 +321,15 @@ export default function AdminScreen() {
     );
   }
 
-  if (loading) {
-    return <LoadingScreen accessibilityLabel="Loading admin app" />;
+  if (loading && !dashboard) {
+    return (
+      <View style={styles.shell}>
+        <View style={styles.topBar}>
+          <View><Text style={styles.kicker}>Poker Trail Admin</Text><Text style={styles.title}>Events</Text></View>
+        </View>
+        <LoadingStatus label="Loading events" color="#1f2937" />
+      </View>
+    );
   }
 
   if (!dashboard) {

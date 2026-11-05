@@ -1,4 +1,4 @@
-import { APP_BACKGROUND_COLOR, TRAIL_WHITE } from "../../src/lib/theme";
+import { APP_BACKGROUND_COLOR } from "../../src/lib/theme";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -6,13 +6,14 @@ import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-n
 import MapDisplay from "../../components/MapDisplay";
 import CardRow from "../../src/components/CardRow";
 import LeaveEventButton from "../../src/components/LeaveEventButton";
-import LoadingScreen from "../../src/components/LoadingScreen";
+import LoadingStatus from "../../src/components/LoadingStatus";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import useLocation from "../../src/hooks/useLocation";
 import { useEventSession } from "../../src/lib/eventSession";
 import { GameEvent, loadGameBootstrapForEvent } from "../../src/lib/game";
 import { addLocalCardClaim } from "../../src/lib/localHand";
 import HandSyncStatus from "../../src/components/HandSyncStatus";
+import StatusPill from "../../src/components/StatusPill";
 import { addConnectivityListener } from "../../src/lib/connectivity";
 import { getDistanceMeters } from "../../src/lib/utils";
 import { Waypoint } from "../../src/types";
@@ -174,15 +175,7 @@ export default function Index() {
     }
   }
 
-  if (isLoadingGame || !hand) {
-    return (
-      <LoadingScreen
-        accessibilityLabel={isLoadingGame ? "Loading event" : "Loading your hand"}
-      />
-    );
-  }
-
-  if (!event || waypoints.length === 0 || !hand) {
+  if (!isLoadingGame && (!event || waypoints.length === 0)) {
     return (
       <View onLayout={layout.onLayout} style={styles.container}>
         <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
@@ -206,7 +199,7 @@ export default function Index() {
       <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
       {screenError ? <Text accessibilityRole="alert" style={styles.errorText}>{screenError}</Text> : null}
       <View style={styles.map}>
-        <MapDisplay
+        {waypoints.length > 0 ? <MapDisplay
           controls={layout.control}
           waypoints={waypoints}
           visited={visited}
@@ -215,15 +208,12 @@ export default function Index() {
             longitude: location.coords.longitude,
             heading: heading ?? location.coords.heading,
           } : null}
-        />
+        /> : <LoadingStatus label="Loading event" />}
         {!location || errorMsg ? (
           <ScrollView style={[styles.locationBanner, { top: layout.controlTop + layout.controlSize + 12, left: layout.left, right: layout.right }]} contentContainerStyle={styles.locationBannerContent}>
-            <Text accessibilityLiveRegion="polite" style={styles.locationText}>
-              {errorMsg ?? "Getting your location… Allow location access when prompted."}
-            </Text>
-            <Pressable accessibilityRole="button" onPress={retryLocation} style={styles.locationRetry}>
-              <Text style={styles.locationText}>Retry location</Text>
-            </Pressable>
+            <StatusPill message={errorMsg ?? "Getting your location…"} icon="location-outline"
+              loading={!errorMsg} error={Boolean(errorMsg)} fontSize={layout.detailSize}
+              onRetry={retryLocation} retryLabel="Retry location" />
           </ScrollView>
         ) : null}
         <View pointerEvents="box-none" style={[styles.syncOverlay, { bottom: layout.gap, left: layout.left, right: layout.right }]}>
@@ -231,7 +221,7 @@ export default function Index() {
         </View>
       </View>
         <ScrollView style={[styles.bottomPanel, { maxHeight: layout.handPanelHeight }]} contentContainerStyle={[styles.handContent, { paddingLeft: layout.left, paddingRight: layout.right, paddingVertical: layout.gap * 1.5, gap: layout.gap / 2 }]} >
-
+          {isLoadingGame || !hand ? <LoadingStatus label={isLoadingGame ? "Loading event" : "Loading your hand"} /> : null}
           <View style={[styles.cardsArea, { padding: layout.gap * 1.5 }]}>
             <CardRow
               visitOrder={visitOrder}
@@ -292,18 +282,14 @@ const styles = StyleSheet.create({
   },
   cardsArea: {
     width: "100%",
-    borderWidth: 3, borderColor: TRAIL_WHITE, borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 0,
   },
   locationBanner: {
-    position: "absolute", maxHeight: "65%", backgroundColor: APP_BACKGROUND_COLOR,
-    borderColor: "#ffffff", borderWidth: 1, borderRadius: 6, zIndex: 2,
+    position: "absolute", maxHeight: "35%", zIndex: 2,
   },
-  locationBannerContent: { padding: 12, gap: 8, alignItems: "center" },
-  locationText: { color: "#ffffff", fontSize: 14, textAlign: "center" },
-  locationRetry: { minHeight: 44, justifyContent: "center", borderWidth: 1, borderColor: "#ffffff", paddingHorizontal: 16, paddingVertical: 8 },
+  locationBannerContent: { paddingVertical: 4, alignItems: "center" },
   refreshButton: {
     alignSelf: "flex-start",
     backgroundColor: APP_BACKGROUND_COLOR,

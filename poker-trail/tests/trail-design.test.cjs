@@ -24,7 +24,7 @@ test('reference-style bottom tabs preserve selection, navigation and cancellable
       navigate: (...args) => navigations.push(args),
     },
   };
-  const tabs = TrailTabBar(props).props.children;
+  const tabs = TrailTabBar(props).props.children.props.children.props.children;
   assert.equal(tabs.length, 2);
   assert.equal(tabs[0].props.accessibilityState.selected, true);
   assert.equal(tabs[1].props.accessibilityState.selected, false);
@@ -33,6 +33,13 @@ test('reference-style bottom tabs preserve selection, navigation and cancellable
   assert.equal(boardLabel.props.style[0].fontFamily, 'RobotoSlab_800ExtraBold');
   assert.ok(Math.abs(mapLabel.props.style[1].fontSize - 88 * 390 / 1241) < 0.0001);
   assert.ok(Math.abs(boardLabel.props.style[1].fontSize - 60 * 390 / 1241) < 0.0001);
+  const WideTrailTabBar = loader({
+    'react-native': { ...native, useWindowDimensions: () => ({ width: 1600, height: 900, fontScale: 1 }) },
+    'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) },
+  })('src/components/TrailTabBar.tsx').default;
+  const wideLabels = WideTrailTabBar(props).props.children.props.children.props.children.map(tab => tab.props.children);
+  assert.equal(wideLabels[0].props.style[1].fontSize, 44);
+  assert.equal(wideLabels[1].props.style[1].fontSize, 30);
   tabs[0].props.onPress(); assert.equal(navigations.length, 0, 'pressing the selected tab does not navigate again');
   tabs[1].props.onPress(); assert.deepEqual(navigations, [['leaderboard', undefined]]);
   prevented = true; tabs[1].props.onPress(); assert.equal(navigations.length, 1);

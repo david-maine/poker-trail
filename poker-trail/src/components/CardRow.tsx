@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
+import { Image, View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 
-import { TRAIL_INK } from "../lib/theme";
 import PlayingCard from "./PlayingCard";
 import { getCardRowLayout } from "../lib/responsiveLayout";
 
@@ -35,14 +34,14 @@ export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds 
                 <Text style={styles.pendingText}>Sync</Text>
               </View>
             ) : (
-              <View style={styles.cardBack} />
+              <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
             )}
           </View>
         );
       })}
       {Array.from({ length: Math.max(0, total - visitOrder.length) }).map((_, i) => (
         <View key={`empty-${i}`} style={[styles.cardSlot, { width: cards.width, height: cards.height }]}>
-          <View style={styles.cardBack} />
+          <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
         </View>
       ))}
     </ScrollView>
@@ -66,10 +65,6 @@ const styles = StyleSheet.create({
   cardBack: {
     width: "100%",
     height: "100%",
-    borderColor: TRAIL_INK,
-    borderRadius: 8,
-    borderWidth: 3,
-    backgroundColor: TRAIL_INK,
   },
   pendingCard: {
     width: "100%",

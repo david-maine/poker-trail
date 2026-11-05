@@ -1,13 +1,16 @@
 import { Image, StyleSheet, View } from "react-native";
 
-// The supplied landing artwork has a transparent lower section reserved for form
-// fields. Frame its upper illustration so those fields stay real, usable controls.
+// Alpha bounds in the 1241 x 2690 source: x=18..1165, y=129..1693.
+// Clip transparent margins on every side without modifying the source asset.
+export const ARTWORK_ASPECT_RATIO = 1148 / 1565;
+
 export default function TrailBrandArtwork({ width }: { width: number }) {
+  const scale = width / 1148;
   return (
-    <View style={[styles.frame, { width, height: width * 1750 / 1241 }]}>
+    <View style={[styles.frame, { width, height: width / ARTWORK_ASPECT_RATIO }]}>
       <Image accessibilityRole="image" accessibilityLabel="Poker Trail — join the hunt"
         source={require("../../assets/images/POKER-TRAIL-landingpage.png")}
-        resizeMode="contain" style={{ width, height: width * 2690 / 1241 }} />
+        resizeMode="contain" style={{ position: "absolute", left: -18 * scale, top: -129 * scale, width: 1241 * scale, height: 2690 * scale }} />
     </View>
   );
 }

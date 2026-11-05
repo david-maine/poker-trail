@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import LoadingScreen from "../src/components/LoadingScreen";
+import LoadingStatus from "../src/components/LoadingStatus";
 import OrganiserWaypointMap from "../src/components/OrganiserWaypointMap";
 import type { WaypointMapPoint } from "../src/components/OrganiserWaypointMap";
 import {
@@ -393,8 +393,16 @@ export default function OrganiserScreen() {
     );
   }
 
-  if (loading) {
-    return <LoadingScreen accessibilityLabel="Loading organiser portal" />;
+  if (loading && !dashboard) {
+    return (
+      <View style={styles.shell}>
+        <View style={styles.loginHeader}>
+          <Text style={styles.kicker}>Poker Trail Organiser</Text>
+          <Text style={styles.loginTitle}>Manage your events</Text>
+        </View>
+        <LoadingStatus label="Loading events" color="#1f2937" />
+      </View>
+    );
   }
 
   if (!dashboard) {

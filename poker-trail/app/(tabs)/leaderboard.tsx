@@ -7,7 +7,7 @@ import { AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from "
 import LeaveEventButton from "../../src/components/LeaveEventButton";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import { getCardRowLayout } from "../../src/lib/responsiveLayout";
-import LoadingScreen from "../../src/components/LoadingScreen";
+import LoadingStatus from "../../src/components/LoadingStatus";
 import PlayingCard from "../../src/components/PlayingCard";
 import { useEventSession } from "../../src/lib/eventSession";
 import {
@@ -20,9 +20,10 @@ import HandSyncStatus from "../../src/components/HandSyncStatus";
 
 export default function LeaderboardScreen() {
   const layout = useResponsiveLayout(false);
-  // Keep the 75pt reference size proportional to the visible leaderboard width.
-  const playerNameSize = 75 * Math.min(layout.contentWidth, layout.contentMaxWidth) / 1241;
-  const entryDetailSize = 50 * Math.min(layout.contentWidth, layout.contentMaxWidth) / 1241;
+  // Preserve narrow-screen typography and cap wide-screen text at half its original maximum.
+  const typographyWidth = Math.min(layout.contentWidth, layout.contentMaxWidth / 2);
+  const playerNameSize = 75 * typographyWidth / 1241;
+  const entryDetailSize = 50 * typographyWidth / 1241;
   const cards = getCardRowLayout(Math.min(layout.contentWidth, layout.contentMaxWidth), 5, layout.cardHeight, layout.cardGap);
   const { registrationState } = useEventSession();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -95,10 +96,6 @@ export default function LeaderboardScreen() {
   const visibleEntries = entries;
   const visibleCurrentUserId = currentUserId;
 
-  if (loading && visibleEntries.length === 0) {
-    return <LoadingScreen accessibilityLabel="Loading leaderboard" />;
-  }
-
   if (!event && visibleEntries.length === 0) {
     return (
       <View style={styles.centered}>
@@ -138,10 +135,12 @@ export default function LeaderboardScreen() {
           style={{ width: Math.min(160, Math.max(72, layout.height * 0.18)) * 392 / 454, height: Math.min(160, Math.max(72, layout.height * 0.18)) }} />
         <HandSyncStatus fontSize={layout.detailSize} />
       </View>
-      <View style={[styles.background, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: layout.gap, paddingBottom: layout.bottom }]}>
+      <View style={[styles.background, { paddingLeft: layout.left, paddingRight: layout.right }]}>
         <View style={styles.boardContent}>
 
-          {visibleEntries.length === 0 ? (
+          {loading && visibleEntries.length === 0 ? (
+            <LoadingStatus label="Loading leaderboard" color={TRAIL_INK} />
+          ) : visibleEntries.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>{errorMessage ? "Unable to load the leaderboard" : "No players have joined yet"}</Text>
               <Text style={styles.emptyText}>
@@ -150,7 +149,7 @@ export default function LeaderboardScreen() {
             </View>
           ) : (
             <ScrollView
-              contentContainerStyle={styles.listContent}
+              contentContainerStyle={[styles.listContent, { paddingTop: layout.gap }]}
               style={styles.list}
               showsVerticalScrollIndicator={false}
             >
@@ -183,7 +182,7 @@ export default function LeaderboardScreen() {
                                 style={styles.leaderboardCard}
                               />
                             ) : (
-                              <View style={styles.cardBack} />
+                              <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
                             )}
                           </View>
                         );
@@ -191,10 +190,9 @@ export default function LeaderboardScreen() {
                     </View>
 
                     <View style={styles.metaRow}>
-                      <Text numberOfLines={1} style={[styles.handNameText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
+                      <Text style={[styles.handNameText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
                         {entry.visitCount === 0 ? "No cards collected" : entry.bestHandName}
-                      </Text>
-                      <Text numberOfLines={1} style={[styles.metaText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
+                        {" · "}
                         {timeLabel}
                       </Text>
                     </View>
@@ -206,9 +204,11 @@ export default function LeaderboardScreen() {
             </ScrollView>
           )}
 
-          <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
-            {errorMessage ? <Text style={styles.errorTextSmall}>{errorMessage}</Text> : null}
-          </ScrollView>
+          {errorMessage ? (
+            <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
+              <Text style={styles.errorTextSmall}>{errorMessage}</Text>
+            </ScrollView>
+          ) : null}
         </View>
       </View>
     </View>
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   listContent: {
-    paddingBottom: 8,
+    paddingBottom: 0,
   },
   trophyHeader: { backgroundColor: APP_BACKGROUND_COLOR, width: "100%", alignItems: "center", gap: 8 },
   headerLine: {
@@ -328,29 +328,18 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   cardBack: {
-    backgroundColor: TRAIL_INK,
-    borderColor: TRAIL_INK,
-    borderRadius: 8,
-    borderWidth: 3,
     height: "100%",
     width: "100%",
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: 8,
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     paddingVertical: 3,
   },
   handNameText: {
     flex: 1,
-    color: TRAIL_INK,
-    fontFamily: "Montserrat_500Medium_Italic",
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  metaText: {
-    flexShrink: 0,
+    textAlign: "left",
     color: TRAIL_INK,
     fontFamily: "Montserrat_500Medium_Italic",
     fontSize: 11,
