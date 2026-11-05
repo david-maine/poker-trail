@@ -1,3 +1,4 @@
+import { CARD_BACK_IMAGE } from "../lib/cardImages";
 import React, { useState } from "react";
 import { Image, View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 
@@ -34,14 +35,14 @@ export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds 
                 <Text style={styles.pendingText}>Sync</Text>
               </View>
             ) : (
-              <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
+              <Image accessibilityLabel="Empty card slot" source={CARD_BACK_IMAGE} resizeMode="contain" style={styles.cardBack} />
             )}
           </View>
         );
       })}
       {Array.from({ length: Math.max(0, total - visitOrder.length) }).map((_, i) => (
         <View key={`empty-${i}`} style={[styles.cardSlot, { width: cards.width, height: cards.height }]}>
-          <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
+          <Image accessibilityLabel="Empty card slot" source={CARD_BACK_IMAGE} resizeMode="contain" style={styles.cardBack} />
         </View>
       ))}
     </ScrollView>

@@ -46,9 +46,8 @@ test('reference-style bottom tabs preserve selection, navigation and cancellable
   tabs[1].props.onLongPress(); assert.equal(events.at(-1).type, 'tabLongPress');
 });
 
-test('sync pill hides saved cards, respects offline/syncing state, and opens error details', () => {
+test('sync pill only shows failures, hides during retries, and opens error details', () => {
   let retried = 0;
-  let online = true;
   const dialogs = [];
   const session = { syncingHand: false, retryHandSync: () => retried++, hand: {
     claims: [{ waypointId: 'first' }], acknowledgedWaypointIds: ['first'], status: 'collecting', lastSubmissionError: null,
@@ -56,7 +55,6 @@ test('sync pill hides saved cards, respects offline/syncing state, and opens err
   const HandSyncStatus = loader({
     'react-native': { ...native, Platform: { OS: 'ios' }, Alert: { alert: (...args) => dialogs.push(args) } },
     '@expo/vector-icons': { Ionicons: 'Icon' },
-    '../hooks/useConnectionStatus': { default: () => online },
     '../lib/eventSession': { useEventSession: () => session },
   })('src/components/HandSyncStatus.tsx').default;
   function find(node, predicate) {
@@ -68,29 +66,20 @@ test('sync pill hides saved cards, respects offline/syncing state, and opens err
   const hasMessage = (node, message) => Boolean(find(node, child => child.type === 'Text' && child.props.children === message));
   assert.equal(HandSyncStatus({}), null);
   session.hand.acknowledgedWaypointIds = [];
-  const pending = HandSyncStatus({});
-  assert.ok(hasMessage(pending, '1 card waiting to sync'));
-  retryButton(pending).props.onPress(); assert.equal(retried, 1);
-  online = false;
-  const offline = HandSyncStatus({});
-  assert.ok(hasMessage(offline, 'Offline · 1 card pending'));
-  assert.equal(retryButton(offline), undefined);
-  online = true;
-  assert.equal(retryButton(HandSyncStatus({})).props.disabled, false);
+  assert.equal(HandSyncStatus({}), null, 'queued cards do not show a notification');
   session.syncingHand = true;
-  const syncing = HandSyncStatus({});
-  assert.ok(hasMessage(syncing, 'Syncing cards'));
-  assert.equal(retryButton(syncing).props.disabled, true);
-  assert.equal(retryButton(syncing).props.onPress, undefined);
+  assert.equal(HandSyncStatus({}), null, 'normal syncing is silent');
+  session.hand.lastSubmissionError = 'Offline. Cards will sync when you reconnect.';
+  assert.equal(HandSyncStatus({}), null, 'stale errors stay hidden during an active retry');
   session.syncingHand = false;
   session.hand.acknowledgedWaypointIds = ['first'];
   session.hand.lastSubmissionError = 'Location proof needs a retry';
   const error = HandSyncStatus({});
-  assert.ok(hasMessage(error, 'Sync issue'));
+  assert.ok(hasMessage(error, 'Cards failed to sync'));
   assert.equal(hasMessage(error, session.hand.lastSubmissionError), false, 'the full error stays out of the layout');
-  find(error, child => child.props.accessibilityLabel === 'Sync issue. Show details').props.onPress();
+  find(error, child => child.props.accessibilityLabel === 'Cards failed to sync. Show details').props.onPress();
   assert.equal(dialogs[0][1], session.hand.lastSubmissionError);
-  retryButton(error).props.onPress(); assert.equal(retried, 2);
+  retryButton(error).props.onPress(); assert.equal(retried, 1);
   session.hand.lastSubmissionError = null;
   assert.equal(HandSyncStatus({}), null, 'the pill disappears once all claims are saved');
 });

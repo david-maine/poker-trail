@@ -49,10 +49,10 @@ export default function MapDisplay(props: PlayerMapState) {
   return (
     <View style={styles.container}>
       <View accessibilityLabel="Event map" ref={mapNode} style={styles.map} />
-      {loading || error ? (
+      {error ? (
         <View style={styles.message}>
-          <StatusPill message={error ?? "Loading map…"} loading={loading && !error} error={Boolean(error)}
-            onRetry={error ? () => setAttempt(value => value + 1) : undefined} retryLabel="Retry map" />
+          <StatusPill message={error} error
+            onRetry={() => setAttempt(value => value + 1)} retryLabel="Retry map" />
         </View>
       ) : null}
       <Pressable accessibilityRole="button" accessibilityLabel="Recenter map on your location"

@@ -1,13 +1,15 @@
+import { CARD_BACK_IMAGE } from "../../src/lib/cardImages";
 import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE, TRAIL_DISPLAY_FONT, TRAIL_BODY_FONT } from "../../src/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { AppState, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import LeaveEventButton from "../../src/components/LeaveEventButton";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import { getCardRowLayout } from "../../src/lib/responsiveLayout";
 import LoadingStatus from "../../src/components/LoadingStatus";
+import CardImage, { preloadCardImages } from "../../src/components/CardImage";
 import PlayingCard from "../../src/components/PlayingCard";
 import { useEventSession } from "../../src/lib/eventSession";
 import {
@@ -36,6 +38,8 @@ export default function LeaderboardScreen() {
   const event = registrationState.event;
   const eventId = event?.id ?? "";
   const activeEvent = useRef(eventId);
+
+  useEffect(() => { void preloadCardImages(); }, []);
 
   useEffect(() => {
     activeEvent.current = eventId;
@@ -139,7 +143,7 @@ export default function LeaderboardScreen() {
         <View style={styles.boardContent}>
 
           {loading && visibleEntries.length === 0 ? (
-            <LoadingStatus label="Loading leaderboard" color={TRAIL_INK} />
+            <LoadingStatus label="Loading leaderboard" color={TRAIL_INK} spinnerOnly />
           ) : visibleEntries.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>{errorMessage ? "Unable to load the leaderboard" : "No players have joined yet"}</Text>
@@ -148,13 +152,42 @@ export default function LeaderboardScreen() {
               </Text>
             </View>
           ) : (
-            <ScrollView
+            <FlatList
+              data={visibleEntries}
+              keyExtractor={entry => entry.runId}
+              extraData={visibleCurrentUserId}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={5}
               contentContainerStyle={[styles.listContent, { paddingTop: layout.gap }]}
               style={styles.list}
               showsVerticalScrollIndicator={false}
-            >
-              {visibleEntries.map((entry) => {
-                const isCurrentUser = visibleCurrentUserId === entry.userId;
+              renderItem={({ item }) => <LeaderboardRow key={item.runId} entry={item}
+                currentUserId={visibleCurrentUserId} cards={cards}
+                playerNameSize={playerNameSize} entryDetailSize={entryDetailSize} />}
+            />
+          )}
+
+          {errorMessage ? (
+            <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
+              <Text style={styles.errorTextSmall}>{errorMessage}</Text>
+            </ScrollView>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+type RowProps = {
+  entry: LeaderboardEntry;
+  currentUserId: string | null;
+  cards: ReturnType<typeof getCardRowLayout>;
+  playerNameSize: number;
+  entryDetailSize: number;
+};
+const LeaderboardRow = memo(function LeaderboardRow({ entry, currentUserId, cards, playerNameSize, entryDetailSize }: RowProps) {
+                const isCurrentUser = currentUserId === entry.userId;
                 const timeLabel = entry.finishedAt
                   ? formatDateTime(entry.finishedAt)
                   : formatDateTime(entry.startedAt);
@@ -182,7 +215,7 @@ export default function LeaderboardScreen() {
                                 style={styles.leaderboardCard}
                               />
                             ) : (
-                              <Image accessibilityLabel="Empty card slot" source={require("../../assets/images/cards/card-back.png")} resizeMode="contain" style={styles.cardBack} />
+                              <CardImage accessibilityLabel="Empty card slot" source={CARD_BACK_IMAGE} resizeMode="contain" style={styles.cardBack} />
                             )}
                           </View>
                         );
@@ -200,20 +233,17 @@ export default function LeaderboardScreen() {
                     <View style={styles.entryLine} />
                   </View>
                 );
-              })}
-            </ScrollView>
-          )}
 
-          {errorMessage ? (
-            <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
-              <Text style={styles.errorTextSmall}>{errorMessage}</Text>
-            </ScrollView>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
-}
+}, (previous, next) =>
+  previous.currentUserId === next.currentUserId &&
+  previous.playerNameSize === next.playerNameSize && previous.entryDetailSize === next.entryDetailSize &&
+  previous.cards.width === next.cards.width && previous.cards.height === next.cards.height && previous.cards.gap === next.cards.gap &&
+  previous.entry.runId === next.entry.runId && previous.entry.userId === next.entry.userId &&
+  previous.entry.playerLabel === next.entry.playerLabel && previous.entry.leaderboardRank === next.entry.leaderboardRank &&
+  previous.entry.startedAt === next.entry.startedAt && previous.entry.finishedAt === next.entry.finishedAt &&
+  previous.entry.visitCount === next.entry.visitCount && previous.entry.bestHandName === next.entry.bestHandName &&
+  previous.entry.bestHandCards.join(',') === next.entry.bestHandCards.join(',')
+);
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {

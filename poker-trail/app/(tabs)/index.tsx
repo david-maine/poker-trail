@@ -1,12 +1,11 @@
 import { APP_BACKGROUND_COLOR } from "../../src/lib/theme";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, ScrollView, StyleSheet, View } from "react-native";
 
 import MapDisplay from "../../components/MapDisplay";
 import CardRow from "../../src/components/CardRow";
 import LeaveEventButton from "../../src/components/LeaveEventButton";
-import LoadingStatus from "../../src/components/LoadingStatus";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import useLocation from "../../src/hooks/useLocation";
 import { useEventSession } from "../../src/lib/eventSession";
@@ -175,31 +174,12 @@ export default function Index() {
     }
   }
 
-  if (!isLoadingGame && (!event || waypoints.length === 0)) {
-    return (
-      <View onLayout={layout.onLayout} style={styles.container}>
-        <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
-        <Text style={styles.errorText}>
-          {screenError ?? "No active event is configured in Supabase yet."}
-        </Text>
-        <Pressable
-          onPress={() => {
-            void loadGame(false);
-          }}
-          style={styles.refreshButton}
-        >
-          <Text style={styles.refreshButtonText}>Retry</Text>
-        </Pressable>
-      </View>
-    );
-  }
 
   return (
     <View onLayout={layout.onLayout} style={styles.container}>
       <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
-      {screenError ? <Text accessibilityRole="alert" style={styles.errorText}>{screenError}</Text> : null}
       <View style={styles.map}>
-        {waypoints.length > 0 ? <MapDisplay
+        {waypoints.length > 0 || location ? <MapDisplay
           controls={layout.control}
           waypoints={waypoints}
           visited={visited}
@@ -208,11 +188,17 @@ export default function Index() {
             longitude: location.coords.longitude,
             heading: heading ?? location.coords.heading,
           } : null}
-        /> : <LoadingStatus label="Loading event" />}
-        {!location || errorMsg ? (
+        /> : null}
+        {screenError || (!isLoadingGame && (!event || waypoints.length === 0)) ? (
+          <View style={[styles.eventError, { top: layout.controlTop + layout.controlSize + 70, left: layout.left, right: layout.right }]}>
+            <StatusPill message={screenError ?? "No waypoints are available for this event."} error
+              fontSize={layout.detailSize} onRetry={() => { void loadGame(true); }} retryLabel="Retry event" />
+          </View>
+        ) : null}
+        {errorMsg ? (
           <ScrollView style={[styles.locationBanner, { top: layout.controlTop + layout.controlSize + 12, left: layout.left, right: layout.right }]} contentContainerStyle={styles.locationBannerContent}>
-            <StatusPill message={errorMsg ?? "Getting your location…"} icon="location-outline"
-              loading={!errorMsg} error={Boolean(errorMsg)} fontSize={layout.detailSize}
+            <StatusPill message={errorMsg} icon="location-outline"
+              error fontSize={layout.detailSize}
               onRetry={retryLocation} retryLabel="Retry location" />
           </ScrollView>
         ) : null}
@@ -221,12 +207,11 @@ export default function Index() {
         </View>
       </View>
         <ScrollView style={[styles.bottomPanel, { maxHeight: layout.handPanelHeight }]} contentContainerStyle={[styles.handContent, { paddingLeft: layout.left, paddingRight: layout.right, paddingVertical: layout.gap * 1.5, gap: layout.gap / 2 }]} >
-          {isLoadingGame || !hand ? <LoadingStatus label={isLoadingGame ? "Loading event" : "Loading your hand"} /> : null}
           <View style={[styles.cardsArea, { padding: layout.gap * 1.5 }]}>
             <CardRow
               visitOrder={visitOrder}
               waypointCards={waypointCards}
-              total={waypoints.length}
+              total={waypoints.length || 5}
               maxCardHeight={layout.cardHeight}
               gap={layout.cardGap}
             />
@@ -286,6 +271,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 0,
   },
+  eventError: { position: "absolute", alignItems: "center", zIndex: 2 },
   locationBanner: {
     position: "absolute", maxHeight: "35%", zIndex: 2,
   },

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Poker Trail",
     "slug": "poker-trail",
-    "version": "1.0.1",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon_boat.icon/Assets/app-icon.png",
     "scheme": "pokertrail",
@@ -11,7 +11,7 @@
     "ios": {
       "icon": "./assets/pokertrail.icon",
       "supportsTablet": false,
-      "bundleIdentifier": "com.davidmaine.pokertrail",
+      "bundleIdentifier": "com.davidmaine.pokerrun",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Poker Trail uses your location while the app is open to confirm when you are at event waypoints and collect your cards.",
         "ITSAppUsesNonExemptEncryption": false

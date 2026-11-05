@@ -8,6 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "optimize:cards": "node scripts/optimize-card-assets.cjs",
     "lint": "expo lint",
     "test": "node --test tests/*.test.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
@@ -54,6 +55,7 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "jimp-compact": "^0.16.1",
     "supabase": "^2.84.10",
     "typescript": "~5.9.2"
   },

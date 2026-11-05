@@ -1,7 +1,7 @@
-import React from "react";
+import { CARD_IMAGES } from "../lib/cardImages";
+import CardImage from "./CardImage";
+import React, { useState } from "react";
 import {
-  Image,
-  ImageSourcePropType,
   StyleProp,
   StyleSheet,
   Text,
@@ -38,77 +38,24 @@ const SUIT_NAMES: Record<string, string> = {
   C: "clubs",
 };
 
-const CARD_IMAGES: Record<string, ImageSourcePropType> = {
-  "ace-of-hearts": require("../../assets/images/cards/ace-of-hearts.png"),
-  "two-of-hearts": require("../../assets/images/cards/two-of-hearts.png"),
-  "three-of-hearts": require("../../assets/images/cards/three-of-hearts.png"),
-  "four-of-hearts": require("../../assets/images/cards/four-of-hearts.png"),
-  "five-of-hearts": require("../../assets/images/cards/five-of-hearts.png"),
-  "six-of-hearts": require("../../assets/images/cards/six-of-hearts.png"),
-  "seven-of-hearts": require("../../assets/images/cards/seven-of-hearts.png"),
-  "eight-of-hearts": require("../../assets/images/cards/eight-of-hearts.png"),
-  "nine-of-hearts": require("../../assets/images/cards/nine-of-hearts.png"),
-  "ten-of-hearts": require("../../assets/images/cards/ten-of-hearts.png"),
-  "jack-of-hearts": require("../../assets/images/cards/jack-of-hearts.png"),
-  "queen-of-hearts": require("../../assets/images/cards/queen-of-hearts.png"),
-  "king-of-hearts": require("../../assets/images/cards/king-of-hearts.png"),
-  "ace-of-spades": require("../../assets/images/cards/ace-of-spades.png"),
-  "two-of-spades": require("../../assets/images/cards/two-of-spades.png"),
-  "three-of-spades": require("../../assets/images/cards/three-of-spades.png"),
-  "four-of-spades": require("../../assets/images/cards/four-of-spades.png"),
-  "five-of-spades": require("../../assets/images/cards/five-of-spades.png"),
-  "six-of-spades": require("../../assets/images/cards/six-of-spades.png"),
-  "seven-of-spades": require("../../assets/images/cards/seven-of-spades.png"),
-  "eight-of-spades": require("../../assets/images/cards/eight-of-spades.png"),
-  "nine-of-spades": require("../../assets/images/cards/nine-of-spades.png"),
-  "ten-of-spades": require("../../assets/images/cards/ten-of-spades.png"),
-  "jack-of-spades": require("../../assets/images/cards/jack-of-spades.png"),
-  "queen-of-spades": require("../../assets/images/cards/queen-of-spades.png"),
-  "king-of-spades": require("../../assets/images/cards/king-of-spades.png"),
-  "ace-of-diamonds": require("../../assets/images/cards/ace-of-diamonds.png"),
-  "two-of-diamonds": require("../../assets/images/cards/two-of-diamonds.png"),
-  "three-of-diamonds": require("../../assets/images/cards/three-of-diamonds.png"),
-  "four-of-diamonds": require("../../assets/images/cards/four-of-diamonds.png"),
-  "five-of-diamonds": require("../../assets/images/cards/five-of-diamonds.png"),
-  "six-of-diamonds": require("../../assets/images/cards/six-of-diamonds.png"),
-  "seven-of-diamonds": require("../../assets/images/cards/seven-of-diamonds.png"),
-  "eight-of-diamonds": require("../../assets/images/cards/eight-of-diamonds.png"),
-  "nine-of-diamonds": require("../../assets/images/cards/nine-of-diamonds.png"),
-  "ten-of-diamonds": require("../../assets/images/cards/ten-of-diamonds.png"),
-  "jack-of-diamonds": require("../../assets/images/cards/jack-of-diamonds.png"),
-  "queen-of-diamonds": require("../../assets/images/cards/queen-of-diamonds.png"),
-  "king-of-diamonds": require("../../assets/images/cards/king-of-diamonds.png"),
-  "ace-of-clubs": require("../../assets/images/cards/ace-of-clubs.png"),
-  "two-of-clubs": require("../../assets/images/cards/two-of-clubs.png"),
-  "three-of-clubs": require("../../assets/images/cards/three-of-clubs.png"),
-  "four-of-clubs": require("../../assets/images/cards/four-of-clubs.png"),
-  "five-of-clubs": require("../../assets/images/cards/five-of-clubs.png"),
-  "six-of-clubs": require("../../assets/images/cards/six-of-clubs.png"),
-  "seven-of-clubs": require("../../assets/images/cards/seven-of-clubs.png"),
-  "eight-of-clubs": require("../../assets/images/cards/eight-of-clubs.png"),
-  "nine-of-clubs": require("../../assets/images/cards/nine-of-clubs.png"),
-  "ten-of-clubs": require("../../assets/images/cards/ten-of-clubs.png"),
-  "jack-of-clubs": require("../../assets/images/cards/jack-of-clubs.png"),
-  "queen-of-clubs": require("../../assets/images/cards/queen-of-clubs.png"),
-  "king-of-clubs": require("../../assets/images/cards/king-of-clubs.png"),
-};
 
 export default function PlayingCard({ card, compact = false, style }: Props) {
+  const [failedImage, setFailedImage] = useState<string | null>(null);
   const details = getCardDetails(card);
   const cardImage = details?.image;
   const label = details?.label ?? card;
 
-  if (!cardImage) {
+  if (!cardImage || failedImage === card) {
     return (
       <View accessible accessibilityRole="image" accessibilityLabel={label} style={[styles.card, compact ? styles.compactCard : null, style]}>
-        <Text style={styles.fallbackText}>{card}</Text>
+        <Text style={styles.fallbackText}>{label}</Text>
       </View>
     );
   }
 
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={label} style={[styles.card, compact ? styles.compactCard : null, style]}>
-      <Image accessible={false} source={cardImage} style={styles.cardImage} resizeMode="contain" />
+      <CardImage key={card} accessible={false} source={cardImage} style={styles.cardImage} resizeMode="contain" onError={() => setFailedImage(card)} />
     </View>
   );
 }

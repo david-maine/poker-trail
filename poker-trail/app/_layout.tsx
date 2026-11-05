@@ -90,7 +90,7 @@ export default function RootLayout() {
   }
 
   if (!ready) {
-    return <LoadingScreen accessibilityLabel="Loading app" />;
+    return <LoadingScreen accessibilityLabel="Loading app" spinnerOnly />;
   }
 
   if (errorMsg || !initialRouteName || !registrationState) {
