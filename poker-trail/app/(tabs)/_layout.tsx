@@ -13,7 +13,7 @@ import { useEventSession } from "../../src/lib/eventSession";
 export default function TabLayout() {
   const [fontsLoaded, fontError] = useFonts({ RobotoSlab_800ExtraBold, Montserrat_500Medium_Italic });
   const { registrationState } = useEventSession();
-  const headerTitle = registrationState.event?.name ?? "Poker Run";
+  const headerTitle = registrationState.event?.name ?? "Poker Trail";
   const [ready, setReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

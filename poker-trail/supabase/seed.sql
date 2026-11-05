@@ -11,8 +11,8 @@ with upserted_event as (
     ends_at
   )
   values (
-    'poker-run-demo',
-    'Poker Run Demo',
+    'poker-trail-demo',
+    'Poker Trail Demo',
     'Demo event for testing waypoint claims and leaderboard flow.',
     'active',
     timezone('utc', now()) - interval '1 hour',

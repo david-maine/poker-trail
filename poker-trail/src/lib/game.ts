@@ -118,7 +118,7 @@ export type RegistrationState = {
   requiresRegistration: boolean;
 };
 
-const SELECTED_EVENT_STORAGE_KEY = "poker-run:selected-event-id:v1";
+const SELECTED_EVENT_STORAGE_KEY = "poker-trail:selected-event-id:v1";
 
 export async function loadRegistrationState(): Promise<RegistrationState> {
   const event = await fetchSavedActiveEvent();

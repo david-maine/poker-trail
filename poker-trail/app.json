@@ -1,24 +1,24 @@
 {
   "expo": {
-    "name": "Poker Run",
-    "slug": "poker-run",
+    "name": "Poker Trail",
+    "slug": "poker-trail",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "pokerrun",
+    "scheme": "pokertrail",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "icon": "./assets/pokertrail.icon",
       "supportsTablet": false,
-      "bundleIdentifier": "com.davidmaine.pokerrun",
+      "bundleIdentifier": "com.davidmaine.pokertrail",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Poker Run uses your location while the app is open to confirm when you are at event waypoints and collect your cards.",
+        "NSLocationWhenInUseUsageDescription": "Poker Trail uses your location while the app is open to confirm when you are at event waypoints and collect your cards.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.davidmaine.pokerrun",
+      "package": "com.davidmaine.pokertrail",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

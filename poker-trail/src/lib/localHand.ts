@@ -2,7 +2,7 @@ import { reconcileAcceptedHand } from "./handSyncState";
 import { drawCard, isValidCard } from "./cards";
 import { getSafeStorage } from "./safeStorage";
 
-const HAND_STORAGE_PREFIX = "poker-run:local-hand:v1:";
+const HAND_STORAGE_PREFIX = "poker-trail:local-hand:v1:";
 
 export type LocalHandStatus = "collecting" | "pending_submission" | "submitted";
 

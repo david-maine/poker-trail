@@ -5,6 +5,8 @@ import { useFonts } from "expo-font";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -68,6 +70,20 @@ export default function RegisterScreen() {
 
     try {
       const eventState = await loadRegistrationStateForEventCode(eventCode);
+      if (eventState.event && eventState.isRegistered && eventState.vesselName) {
+        Keyboard.dismiss();
+        const message = `You have already joined this event as ${eventState.vesselName}`;
+        if (Platform.OS === "web") {
+          globalThis.alert(message);
+        } else {
+          await new Promise<void>(resolve => {
+            Alert.alert("Already joined", message, [{ text: "Continue", onPress: () => resolve() }], { cancelable: false });
+          });
+        }
+        setRegistrationState(eventState);
+        router.replace("/(tabs)");
+        return;
+      }
       const nextRegistrationState = eventState.requiresRegistration && eventState.event
         ? await registerVesselNameForEvent(eventState.event, vesselName)
         : eventState;

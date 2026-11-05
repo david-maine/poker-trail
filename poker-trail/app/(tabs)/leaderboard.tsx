@@ -136,6 +136,7 @@ export default function LeaderboardScreen() {
       <View style={[styles.trophyHeader, { paddingTop: layout.controlTop, paddingBottom: layout.gap, paddingLeft: layout.left, paddingRight: layout.right }]}>
         <Image accessible={false} source={require("../../assets/images/POKER-TRAIL-trophy.png")} resizeMode="contain"
           style={{ width: Math.min(160, Math.max(72, layout.height * 0.18)) * 392 / 454, height: Math.min(160, Math.max(72, layout.height * 0.18)) }} />
+        <HandSyncStatus fontSize={layout.detailSize} />
       </View>
       <View style={[styles.background, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: layout.gap, paddingBottom: layout.bottom }]}>
         <View style={styles.boardContent}>
@@ -162,7 +163,7 @@ export default function LeaderboardScreen() {
                 return (
                   <View key={entry.runId} style={styles.entry}>
                     <View style={styles.entryHeader}>
-                      <Text style={[styles.rankText, { fontSize: layout.playerNameSize, lineHeight: layout.playerNameSize * 1.4 }]}>{entry.leaderboardRank}.</Text>
+                      <Text style={[styles.rankText, { fontSize: playerNameSize, lineHeight: playerNameSize * 1.4 }]}>{entry.leaderboardRank}.</Text>
                       <Text numberOfLines={1} style={[styles.playerName, { fontSize: playerNameSize, lineHeight: playerNameSize * 1.4 }]}>
                         {entry.playerLabel}
                         {isCurrentUser ? " (You)" : ""}
@@ -206,7 +207,6 @@ export default function LeaderboardScreen() {
           )}
 
           <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
-            <HandSyncStatus color={TRAIL_INK} fontSize={layout.detailSize} hideWhenSaved />
             {errorMessage ? <Text style={styles.errorTextSmall}>{errorMessage}</Text> : null}
           </ScrollView>
         </View>
@@ -297,9 +297,8 @@ const styles = StyleSheet.create({
   },
   rankText: {
     color: TRAIL_INK,
-    fontFamily: TRAIL_DISPLAY_FONT,
+    fontFamily: "RobotoSlab_800ExtraBold",
     fontSize: 26,
-    fontWeight: "900",
     lineHeight: 38,
     marginRight: 8,
     minWidth: 24,

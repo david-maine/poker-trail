@@ -12,20 +12,25 @@ import {
 } from "react-native";
 
 import LoadingScreen from "../src/components/LoadingScreen";
+import OrganiserWaypointMap from "../src/components/OrganiserWaypointMap";
+import type { WaypointMapPoint } from "../src/components/OrganiserWaypointMap";
 import {
-  AdminDashboard,
-  AdminEvent,
-  AdminWaypoint,
-  getAdminSession,
-  loadAdminDashboard,
-  saveAdminEvent,
-  saveAdminWaypoint,
-  setAdminEventActive,
-  signInAdmin,
-  signOutAdmin,
-} from "../src/lib/admin";
+  getOrganiserSession,
+  loadOrganiserDashboard,
+  OrganiserDashboard,
+  OrganiserEvent,
+  OrganiserWaypoint,
+  saveOrganiserEvent,
+  saveOrganiserProfile,
+  saveOrganiserWaypoint,
+  signInOrganiser,
+  signOutOrganiser,
+  signUpOrganiser,
+} from "../src/lib/organiser";
 
 type FeatherName = keyof typeof Feather.glyphMap;
+
+type AuthMode = "sign-in" | "sign-up";
 
 type EventFormState = {
   id: string | null;
@@ -48,23 +53,25 @@ const emptyEventForm: EventFormState = {
   name: "",
 };
 
-export default function AdminScreen() {
+export default function OrganiserScreen() {
   const { width } = useWindowDimensions();
   const isNarrow = width < 920;
 
-  const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
+  const [dashboard, setDashboard] = useState<OrganiserDashboard | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventForm, setEventForm] = useState<EventFormState>(emptyEventForm);
   const [waypointForm, setWaypointForm] = useState<WaypointFormState>(() =>
     createEmptyWaypointForm("")
   );
+  const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [needsProfile, setNeedsProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingEvent, setSavingEvent] = useState(false);
   const [savingWaypoint, setSavingWaypoint] = useState(false);
-  const [togglingEventStatusId, setTogglingEventStatusId] = useState<string | null>(null);
-  const [signingIn, setSigningIn] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -76,7 +83,7 @@ export default function AdminScreen() {
       setErrorMessage(null);
 
       try {
-        const authState = await getAdminSession();
+        const authState = await getOrganiserSession();
 
         if (!isMounted) {
           return;
@@ -84,33 +91,38 @@ export default function AdminScreen() {
 
         setEmail(authState.session?.user.email ?? "");
 
-        if (!authState.session || !authState.profile) {
+        if (!authState.session) {
           setDashboard(null);
+          setNeedsProfile(false);
           return;
         }
 
-        const nextDashboard = await loadAdminDashboard();
+        if (!authState.profile) {
+          setDashboard(null);
+          setNeedsProfile(true);
+          return;
+        }
+
+        setDisplayName(authState.profile.displayName);
+        const nextDashboard = await loadOrganiserDashboard();
 
         if (!isMounted) {
           return;
         }
 
-        const nextSelectedId =
-          nextDashboard.events.find((event) => event.status === "active")?.id ??
-          nextDashboard.events[0]?.id ??
-          null;
+        const nextSelectedId = nextDashboard.events[0]?.id ?? null;
+        const nextSelectedEvent =
+          nextDashboard.events.find((event) => event.id === nextSelectedId) ?? null;
 
         setDashboard(nextDashboard);
+        setNeedsProfile(false);
+        setDisplayName(nextDashboard.profile.displayName);
         setSelectedEventId(nextSelectedId);
-        setEventForm(
-          nextDashboard.events.find((event) => event.id === nextSelectedId)
-            ? eventToForm(nextDashboard.events.find((event) => event.id === nextSelectedId)!)
-            : emptyEventForm
-        );
-        setWaypointForm(createEmptyWaypointForm(nextSelectedId ?? ""));
+        setEventForm(nextSelectedEvent ? eventToForm(nextSelectedEvent) : emptyEventForm);
+        setWaypointForm(createWaypointFormForSlot(nextDashboard.waypoints, nextSelectedId, 0));
       } catch (error) {
         if (isMounted) {
-          setErrorMessage(getErrorMessage(error, "Unable to load admin session."));
+          setErrorMessage(getErrorMessage(error, "Unable to load organiser session."));
         }
       } finally {
         if (isMounted) {
@@ -141,17 +153,51 @@ export default function AdminScreen() {
       .sort((first, second) => first.sortOrder - second.sortOrder);
   }, [dashboard, selectedEvent]);
 
+  const editableSelectedWaypoints = useMemo(
+    () => selectedWaypoints.filter(hasUsableWaypointCoordinates),
+    [selectedWaypoints]
+  );
+
   const selectedWaypointSlots = useMemo(
     () =>
       waypointSlotIndexes.map((slotIndex) => ({
         slotIndex,
         waypoint:
-          selectedWaypoints.find((waypoint) => waypoint.sortOrder === slotIndex) ?? null,
+          editableSelectedWaypoints.find((waypoint) => waypoint.sortOrder === slotIndex) ?? null,
       })),
-    [selectedWaypoints]
+    [editableSelectedWaypoints]
   );
 
-  async function refreshDashboard(showSpinner: boolean, preferredEventId?: string) {
+  const currentWaypointPoint = useMemo(
+    () => parseWaypointPoint(waypointForm.latitude, waypointForm.longitude),
+    [waypointForm.latitude, waypointForm.longitude]
+  );
+
+  const currentRadiusMeters = useMemo(
+    () => parsePositiveIntegerOrDefault(waypointForm.radiusMeters, 20),
+    [waypointForm.radiusMeters]
+  );
+
+  const mapWaypoints = useMemo(
+    () =>
+      editableSelectedWaypoints.map((waypoint) =>
+        waypoint.sortOrder === waypointForm.slotIndex && currentWaypointPoint
+          ? {
+              ...waypoint,
+              latitude: currentWaypointPoint.latitude,
+              longitude: currentWaypointPoint.longitude,
+              radiusMeters: currentRadiusMeters,
+            }
+          : waypoint
+      ),
+    [currentRadiusMeters, currentWaypointPoint, editableSelectedWaypoints, waypointForm.slotIndex]
+  );
+
+  async function refreshDashboard(
+    showSpinner: boolean,
+    preferredEventId?: string,
+    preferredSlotIndex = waypointForm.slotIndex
+  ) {
     if (showSpinner) {
       setLoading(true);
     }
@@ -159,48 +205,73 @@ export default function AdminScreen() {
     setErrorMessage(null);
 
     try {
-      const nextDashboard = await loadAdminDashboard();
+      const nextDashboard = await loadOrganiserDashboard();
       const nextSelectedId =
-        preferredEventId ??
-        selectedEventId ??
-        nextDashboard.events.find((event) => event.status === "active")?.id ??
-        nextDashboard.events[0]?.id ??
-        null;
-
-      setDashboard(nextDashboard);
-      setSelectedEventId(nextSelectedId);
-
+        preferredEventId ?? selectedEventId ?? nextDashboard.events[0]?.id ?? null;
       const nextSelectedEvent =
         nextDashboard.events.find((event) => event.id === nextSelectedId) ?? null;
+
+      setDashboard(nextDashboard);
+      setNeedsProfile(false);
+      setDisplayName(nextDashboard.profile.displayName);
+      setSelectedEventId(nextSelectedId);
       setEventForm(nextSelectedEvent ? eventToForm(nextSelectedEvent) : emptyEventForm);
-      setWaypointForm(createEmptyWaypointForm(nextSelectedId ?? ""));
+      setWaypointForm(
+        createWaypointFormForSlot(
+          nextDashboard.waypoints,
+          nextSelectedId,
+          preferredSlotIndex
+        )
+      );
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to load admin dashboard."));
+      setErrorMessage(getErrorMessage(error, "Unable to load organiser dashboard."));
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleSignIn() {
-    setSigningIn(true);
+  async function handleAuthSubmit() {
+    setAuthSubmitting(true);
     setErrorMessage(null);
     setMessage(null);
 
     try {
-      const authState = await signInAdmin(email, password);
+      const authState =
+        authMode === "sign-up"
+          ? await signUpOrganiser(email, password)
+          : await signInOrganiser(email, password);
 
       if (!authState.profile) {
+        setNeedsProfile(true);
         setDashboard(null);
-        setErrorMessage("This account is signed in, but it is not an event admin.");
+        setMessage("Add your organiser name to finish setting up this account.");
         return;
       }
 
+      setDisplayName(authState.profile.displayName);
       setPassword("");
       await refreshDashboard(false);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to sign in."));
+      setErrorMessage(getErrorMessage(error, "Unable to continue."));
     } finally {
-      setSigningIn(false);
+      setAuthSubmitting(false);
+    }
+  }
+
+  async function handleSaveProfile() {
+    setAuthSubmitting(true);
+    setErrorMessage(null);
+    setMessage(null);
+
+    try {
+      const profile = await saveOrganiserProfile(displayName);
+      setDisplayName(profile.displayName);
+      setPassword("");
+      await refreshDashboard(false);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Unable to save organiser profile."));
+    } finally {
+      setAuthSubmitting(false);
     }
   }
 
@@ -209,9 +280,12 @@ export default function AdminScreen() {
     setMessage(null);
 
     try {
-      await signOutAdmin();
+      await signOutOrganiser();
       setDashboard(null);
       setSelectedEventId(null);
+      setEventForm(emptyEventForm);
+      setWaypointForm(createEmptyWaypointForm(""));
+      setNeedsProfile(false);
       setPassword("");
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Unable to sign out."));
@@ -224,12 +298,12 @@ export default function AdminScreen() {
     setMessage(null);
 
     try {
-      const saved = await saveAdminEvent({
+      const saved = await saveOrganiserEvent({
         id: eventForm.id,
         name: eventForm.name,
       });
 
-      setMessage(`Saved ${saved.name}.`);
+      setMessage(`Saved ${saved.name}. Share code ${saved.eventCode} with players.`);
       await refreshDashboard(false, saved.id);
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Unable to save event."));
@@ -248,17 +322,24 @@ export default function AdminScreen() {
     setMessage(null);
 
     try {
-      const saved = await saveAdminWaypoint({
+      const latitude = parseNumber(waypointForm.latitude, "Latitude");
+      const longitude = parseNumber(waypointForm.longitude, "Longitude");
+
+      if (latitude === 0 && longitude === 0) {
+        throw new Error("Choose a waypoint location before saving.");
+      }
+
+      const saved = await saveOrganiserWaypoint({
         id: waypointForm.id,
         eventId: selectedEvent.id,
         slotIndex: waypointForm.slotIndex,
-        latitude: parseNumber(waypointForm.latitude, "Latitude"),
-        longitude: parseNumber(waypointForm.longitude, "Longitude"),
+        latitude,
+        longitude,
         radiusMeters: parseInteger(waypointForm.radiusMeters, "Radius"),
       });
 
       setMessage(`Saved waypoint ${saved.sortOrder + 1}.`);
-      await refreshDashboard(false, selectedEvent.id);
+      await refreshDashboard(false, selectedEvent.id, saved.sortOrder);
       setWaypointForm(waypointToForm(saved));
     } catch (error) {
       setErrorMessage(getErrorMessage(error, "Unable to save waypoint."));
@@ -267,31 +348,10 @@ export default function AdminScreen() {
     }
   }
 
-  async function handleToggleEventActive(event: AdminEvent) {
-    const shouldActivate = event.status !== "active";
-    setTogglingEventStatusId(event.id);
-    setErrorMessage(null);
-    setMessage(null);
-
-    try {
-      const saved = await setAdminEventActive(event.id, shouldActivate);
-      setMessage(
-        shouldActivate
-          ? `${saved.name} is now active.`
-          : `${saved.name} is now closed.`
-      );
-      await refreshDashboard(false, event.id);
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to update the event status."));
-    } finally {
-      setTogglingEventStatusId(null);
-    }
-  }
-
-  function selectEvent(event: AdminEvent) {
+  function selectEvent(event: OrganiserEvent) {
     setSelectedEventId(event.id);
     setEventForm(eventToForm(event));
-    setWaypointForm(createEmptyWaypointForm(event.id));
+    setWaypointForm(createWaypointFormForSlot(dashboard?.waypoints ?? [], event.id, 0));
     setMessage(null);
     setErrorMessage(null);
   }
@@ -304,7 +364,7 @@ export default function AdminScreen() {
     setErrorMessage(null);
   }
 
-  function selectWaypointSlot(slotIndex: number, waypoint: AdminWaypoint | null) {
+  function selectWaypointSlot(slotIndex: number, waypoint: OrganiserWaypoint | null) {
     setWaypointForm(
       waypoint ? waypointToForm(waypoint) : createEmptyWaypointForm(selectedEventId ?? "", slotIndex)
     );
@@ -312,60 +372,156 @@ export default function AdminScreen() {
     setErrorMessage(null);
   }
 
+  function handleWaypointMapPick(point: WaypointMapPoint) {
+    setWaypointForm((current) => ({
+      ...current,
+      latitude: formatCoordinate(point.latitude),
+      longitude: formatCoordinate(point.longitude),
+    }));
+    setMessage(null);
+    setErrorMessage(null);
+  }
+
   if (Platform.OS !== "web") {
     return (
       <View style={styles.centered}>
-        <Text style={styles.blockedTitle}>Admin is available on web</Text>
-        <Text style={styles.blockedText}>Open this project in a browser and visit /admin.</Text>
+        <Text style={styles.blockedTitle}>Organiser is available on web</Text>
+        <Text style={styles.blockedText}>
+          Open this project in a browser and visit /organiser.
+        </Text>
       </View>
     );
   }
 
   if (loading) {
-    return <LoadingScreen accessibilityLabel="Loading admin app" />;
+    return <LoadingScreen accessibilityLabel="Loading organiser portal" />;
   }
 
   if (!dashboard) {
     return (
       <View style={styles.loginShell}>
         <View style={styles.loginPanel}>
-          <Text style={styles.loginTitle}>Poker Run Admin</Text>
+          <View style={styles.loginHeader}>
+            <Text style={styles.kicker}>Poker Trail Organiser</Text>
+            <Text style={styles.loginTitle}>
+              {needsProfile ? "Finish setup" : "Manage your events"}
+            </Text>
+          </View>
 
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="admin@example.com"
-            placeholderTextColor="#77808c"
-            style={styles.input}
-            value={email}
-          />
+          {!needsProfile ? (
+            <View style={styles.authTabs}>
+              <SegmentButton
+                active={authMode === "sign-in"}
+                label="Sign in"
+                onPress={() => {
+                  setAuthMode("sign-in");
+                  setMessage(null);
+                  setErrorMessage(null);
+                }}
+              />
+              <SegmentButton
+                active={authMode === "sign-up"}
+                label="Sign up"
+                onPress={() => {
+                  setAuthMode("sign-up");
+                  setMessage(null);
+                  setErrorMessage(null);
+                }}
+              />
+            </View>
+          ) : null}
 
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            autoCapitalize="none"
-            autoComplete="password"
-            onChangeText={setPassword}
-            placeholder="Password"
-            placeholderTextColor="#77808c"
-            secureTextEntry
-            style={styles.input}
-            value={password}
-          />
+          {needsProfile ? (
+            <Field label="Organiser name">
+              <TextInput
+                autoCapitalize="words"
+                editable={!authSubmitting}
+                onChangeText={setDisplayName}
+                placeholder="Moreton Bay Poker Trail"
+                placeholderTextColor="#77808c"
+                style={styles.input}
+                value={displayName}
+              />
+            </Field>
+          ) : null}
 
+          {!needsProfile ? (
+            <>
+              <Field label="Email">
+                <TextInput
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  editable={!authSubmitting}
+                  keyboardType="email-address"
+                  onChangeText={setEmail}
+                  placeholder="organiser@example.com"
+                  placeholderTextColor="#77808c"
+                  style={styles.input}
+                  value={email}
+                />
+              </Field>
+
+              <Field label="Password">
+                <TextInput
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  editable={!authSubmitting}
+                  onChangeText={setPassword}
+                  placeholder="Password"
+                  placeholderTextColor="#77808c"
+                  secureTextEntry
+                  style={styles.input}
+                  value={password}
+                />
+              </Field>
+            </>
+          ) : null}
+
+          {message ? <Text style={styles.successText}>{message}</Text> : null}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          <ActionButton
-            disabled={signingIn}
-            icon="log-in"
-            label={signingIn ? "Signing in..." : "Sign in"}
-            onPress={() => {
-              void handleSignIn();
-            }}
-            variant="primary"
-          />
+          <View style={styles.loginActions}>
+            {needsProfile ? (
+              <>
+                <ActionButton
+                  disabled={authSubmitting}
+                  icon="save"
+                  label={authSubmitting ? "Saving..." : "Save profile"}
+                  onPress={() => {
+                    void handleSaveProfile();
+                  }}
+                  variant="primary"
+                />
+                <ActionButton
+                  disabled={authSubmitting}
+                  icon="log-out"
+                  label="Sign out"
+                  onPress={() => {
+                    void handleSignOut();
+                  }}
+                  variant="ghost"
+                />
+              </>
+            ) : (
+              <ActionButton
+                disabled={authSubmitting}
+                icon={authMode === "sign-up" ? "user-plus" : "log-in"}
+                label={
+                  authSubmitting
+                    ? authMode === "sign-up"
+                      ? "Creating..."
+                      : "Signing in..."
+                    : authMode === "sign-up"
+                      ? "Create account"
+                      : "Sign in"
+                }
+                onPress={() => {
+                  void handleAuthSubmit();
+                }}
+                variant="primary"
+              />
+            )}
+          </View>
         </View>
       </View>
     );
@@ -375,10 +531,11 @@ export default function AdminScreen() {
     <View style={styles.shell}>
       <View style={styles.topBar}>
         <View>
-          <Text style={styles.kicker}>Poker Run Admin</Text>
+          <Text style={styles.kicker}>Poker Trail Organiser</Text>
           <Text style={styles.title}>Events</Text>
         </View>
         <View style={styles.topActions}>
+          <Text style={styles.profileName}>{dashboard.profile.displayName}</Text>
           <ActionButton
             icon="refresh-cw"
             label="Refresh"
@@ -404,7 +561,7 @@ export default function AdminScreen() {
       <View style={[styles.workspace, isNarrow ? styles.workspaceNarrow : null]}>
         <View style={[styles.eventRail, isNarrow ? styles.eventRailNarrow : null]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Event List</Text>
+            <Text style={styles.sectionTitle}>Your Events</Text>
             <IconButton
               accessibilityLabel="New event"
               icon="plus"
@@ -414,13 +571,11 @@ export default function AdminScreen() {
 
           <ScrollView contentContainerStyle={styles.eventList}>
             {dashboard.events.length === 0 ? (
-              <Text style={styles.emptyText}>No events yet.</Text>
+              <Text style={styles.emptyText}>Create your first event.</Text>
             ) : (
               dashboard.events.map((event) => {
                 const summary = dashboard.summaries[event.id];
                 const isSelected = event.id === selectedEventId;
-                const isActive = event.status === "active";
-                const isTogglingStatus = togglingEventStatusId === event.id;
 
                 return (
                   <Pressable
@@ -437,23 +592,7 @@ export default function AdminScreen() {
                     <Text style={styles.eventCodeText}>Code {event.eventCode}</Text>
                     <View style={styles.metricRow}>
                       <Metric label="Stops" value={summary?.waypointCount ?? 0} />
-                    </View>
-                    <View style={styles.eventActions}>
-                      <ActionButton
-                        disabled={togglingEventStatusId !== null}
-                        icon={isActive ? "toggle-right" : "toggle-left"}
-                        label={
-                          isTogglingStatus
-                            ? "Updating..."
-                            : isActive
-                              ? "Deactivate"
-                              : "Activate"
-                        }
-                        onPress={() => {
-                          void handleToggleEventActive(event);
-                        }}
-                        variant={isActive ? "ghost" : "secondary"}
-                      />
+                      <Metric label="Players" value={summary?.playerCount ?? 0} />
                     </View>
                   </Pressable>
                 );
@@ -471,42 +610,24 @@ export default function AdminScreen() {
                 </Text>
                 {selectedEvent ? <StatusBadge status={selectedEvent.status} /> : null}
               </View>
-              <View style={styles.sectionActions}>
-                {selectedEvent ? (
-                  <ActionButton
-                    disabled={togglingEventStatusId !== null}
-                    icon={selectedEvent.status === "active" ? "toggle-right" : "toggle-left"}
-                    label={
-                      togglingEventStatusId === selectedEvent.id
-                        ? "Updating..."
-                        : selectedEvent.status === "active"
-                          ? "Deactivate"
-                          : "Activate"
-                    }
-                    onPress={() => {
-                      void handleToggleEventActive(selectedEvent);
-                    }}
-                    variant={selectedEvent.status === "active" ? "ghost" : "secondary"}
-                  />
-                ) : null}
-                <ActionButton
-                  disabled={savingEvent}
-                  icon="save"
-                  label={savingEvent ? "Saving..." : "Save event"}
-                  onPress={() => {
-                    void handleSaveEvent();
-                  }}
-                  variant="primary"
-                />
-              </View>
+              <ActionButton
+                disabled={savingEvent}
+                icon="save"
+                label={savingEvent ? "Saving..." : "Save event"}
+                onPress={() => {
+                  void handleSaveEvent();
+                }}
+                variant="primary"
+              />
             </View>
 
             <Field label="Name">
               <TextInput
+                editable={!savingEvent}
                 onChangeText={(value) => {
                   setEventForm((current) => ({ ...current, name: value }));
                 }}
-                placeholder="Summer Poker Run"
+                placeholder="Summer Poker Trail"
                 placeholderTextColor="#77808c"
                 style={styles.input}
                 value={eventForm.name}
@@ -516,6 +637,7 @@ export default function AdminScreen() {
             {selectedEvent ? (
               <Field label="Event code">
                 <View style={styles.readOnlyCode}>
+                  <Feather name="hash" size={18} color="#0f766e" />
                   <Text selectable style={styles.readOnlyCodeText}>
                     {selectedEvent.eventCode}
                   </Text>
@@ -530,32 +652,47 @@ export default function AdminScreen() {
                 <Text style={styles.sectionTitle}>Waypoints</Text>
               </View>
 
-              <View style={[styles.waypointLayout, isNarrow ? styles.waypointLayoutNarrow : null]}>
-                <View style={styles.waypointList}>
+              <View style={styles.waypointEditor}>
+                <OrganiserWaypointMap
+                  currentPoint={currentWaypointPoint}
+                  onPick={handleWaypointMapPick}
+                  radiusMeters={currentRadiusMeters}
+                  selectedSlotIndex={waypointForm.slotIndex}
+                  waypoints={mapWaypoints}
+                />
+
+                <View style={styles.waypointTabs}>
                   {selectedWaypointSlots.map(({ slotIndex, waypoint }) => (
-                      <Pressable
-                        key={slotIndex}
-                        onPress={() => {
-                          selectWaypointSlot(slotIndex, waypoint);
-                        }}
+                    <Pressable
+                      key={slotIndex}
+                      onPress={() => {
+                        selectWaypointSlot(slotIndex, waypoint);
+                      }}
+                      style={[
+                        styles.waypointTab,
+                        slotIndex === waypointForm.slotIndex ? styles.waypointTabSelected : null,
+                      ]}
+                    >
+                      <Feather
+                        name="map-pin"
+                        size={15}
+                        color={slotIndex === waypointForm.slotIndex ? "#0f766e" : "#6b7280"}
+                      />
+                      <Text
                         style={[
-                          styles.waypointRow,
-                          slotIndex === waypointForm.slotIndex ? styles.waypointRowSelected : null,
+                          styles.waypointTabText,
+                          slotIndex === waypointForm.slotIndex
+                            ? styles.waypointTabTextSelected
+                            : null,
                         ]}
                       >
-                        <Feather name="map-pin" size={16} color="#0f766e" />
-                        <View style={styles.waypointRowText}>
-                          <Text style={styles.waypointName}>
-                            Waypoint {slotIndex + 1}
-                          </Text>
-                          <Text style={styles.waypointMeta}>
-                            {waypoint
-                              ? `${waypoint.latitude.toFixed(5)}, ${waypoint.longitude.toFixed(5)}`
-                              : "Not set"}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    ))}
+                        {slotIndex + 1}
+                      </Text>
+                      <Text style={styles.waypointTabMeta}>
+                        {waypoint ? "Set" : "Not set"}
+                      </Text>
+                    </Pressable>
+                  ))}
                 </View>
 
                 <View style={styles.waypointForm}>
@@ -577,6 +714,7 @@ export default function AdminScreen() {
                   <View style={[styles.formGrid, isNarrow ? styles.formGridNarrow : null]}>
                     <Field label="Latitude">
                       <TextInput
+                        editable={!savingWaypoint}
                         inputMode="decimal"
                         onChangeText={(value) => {
                           setWaypointForm((current) => ({ ...current, latitude: value }));
@@ -589,6 +727,7 @@ export default function AdminScreen() {
                     </Field>
                     <Field label="Longitude">
                       <TextInput
+                        editable={!savingWaypoint}
                         inputMode="decimal"
                         onChangeText={(value) => {
                           setWaypointForm((current) => ({ ...current, longitude: value }));
@@ -603,6 +742,7 @@ export default function AdminScreen() {
 
                   <Field label="Radius meters">
                     <TextInput
+                      editable={!savingWaypoint}
                       inputMode="numeric"
                       onChangeText={(value) => {
                         setWaypointForm((current) => ({ ...current, radiusMeters: value }));
@@ -685,6 +825,27 @@ function IconButton({
   );
 }
 
+function SegmentButton({
+  active,
+  label,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.segmentButton, active ? styles.segmentButtonActive : null]}
+    >
+      <Text style={[styles.segmentButtonText, active ? styles.segmentButtonTextActive : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function Field({ children, label }: { children: React.ReactNode; label: string }) {
   return (
     <View style={styles.field}>
@@ -703,7 +864,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function StatusBadge({ status }: { status: AdminEvent["status"] }) {
+function StatusBadge({ status }: { status: OrganiserEvent["status"] }) {
   const isActive = status === "active";
 
   return (
@@ -715,14 +876,14 @@ function StatusBadge({ status }: { status: AdminEvent["status"] }) {
   );
 }
 
-function eventToForm(event: AdminEvent): EventFormState {
+function eventToForm(event: OrganiserEvent): EventFormState {
   return {
     id: event.id,
     name: event.name,
   };
 }
 
-function waypointToForm(waypoint: AdminWaypoint): WaypointFormState {
+function waypointToForm(waypoint: OrganiserWaypoint): WaypointFormState {
   return {
     id: waypoint.id,
     eventId: waypoint.eventId,
@@ -731,6 +892,30 @@ function waypointToForm(waypoint: AdminWaypoint): WaypointFormState {
     longitude: String(waypoint.longitude),
     radiusMeters: String(waypoint.radiusMeters),
   };
+}
+
+function createWaypointFormForSlot(
+  waypoints: OrganiserWaypoint[],
+  eventId: string | null,
+  slotIndex: number
+): WaypointFormState {
+  if (!eventId) {
+    return createEmptyWaypointForm("", slotIndex);
+  }
+
+  const waypoint =
+    waypoints.find(
+      (candidate) =>
+        candidate.eventId === eventId &&
+        candidate.sortOrder === slotIndex &&
+        hasUsableWaypointCoordinates(candidate)
+    ) ?? null;
+
+  return waypoint ? waypointToForm(waypoint) : createEmptyWaypointForm(eventId, slotIndex);
+}
+
+function hasUsableWaypointCoordinates(waypoint: OrganiserWaypoint) {
+  return !(waypoint.latitude === 0 && waypoint.longitude === 0);
 }
 
 function createEmptyWaypointForm(eventId: string, slotIndex = 0): WaypointFormState {
@@ -772,6 +957,37 @@ function parseInteger(value: string, label: string) {
   return parsed;
 }
 
+function parseWaypointPoint(latitude: string, longitude: string): WaypointMapPoint | null {
+  if (!latitude.trim() || !longitude.trim()) {
+    return null;
+  }
+
+  const parsedLatitude = Number(latitude);
+  const parsedLongitude = Number(longitude);
+
+  if (!Number.isFinite(parsedLatitude) || !Number.isFinite(parsedLongitude)) {
+    return null;
+  }
+
+  if (parsedLatitude === 0 && parsedLongitude === 0) {
+    return null;
+  }
+
+  return {
+    latitude: parsedLatitude,
+    longitude: parsedLongitude,
+  };
+}
+
+function parsePositiveIntegerOrDefault(value: string, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function formatCoordinate(value: number) {
+  return String(Math.round(value * 1_000_000) / 1_000_000);
+}
+
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -797,11 +1013,12 @@ const styles = StyleSheet.create({
   topBar: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
     gap: 16,
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   topActions: {
+    alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
@@ -819,6 +1036,11 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: "800",
     marginTop: 2,
+  },
+  profileName: {
+    color: "#374151",
+    fontSize: 14,
+    fontWeight: "800",
   },
   workspace: {
     flex: 1,
@@ -854,18 +1076,14 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   eventCardSelected: {
-    borderColor: "#0f766e",
     backgroundColor: "#eef8f5",
+    borderColor: "#0f766e",
   },
   eventCardTop: {
     alignItems: "flex-start",
     flexDirection: "row",
     gap: 8,
     justifyContent: "space-between",
-  },
-  eventActions: {
-    alignItems: "flex-start",
-    marginTop: 12,
   },
   eventName: {
     color: "#111827",
@@ -899,13 +1117,6 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: "space-between",
     marginBottom: 14,
-  },
-  sectionActions: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "flex-end",
   },
   sectionTitleGroup: {
     alignItems: "center",
@@ -953,13 +1164,15 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   readOnlyCode: {
-    alignItems: "flex-start",
+    alignItems: "center",
     backgroundColor: "#eef8f5",
     borderColor: "#0f766e",
     borderRadius: 6,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-start",
     minHeight: 42,
-    justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -971,6 +1184,7 @@ const styles = StyleSheet.create({
   },
   metricRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginTop: 12,
   },
@@ -1015,8 +1229,8 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   waypointRowSelected: {
-    borderColor: "#0f766e",
     backgroundColor: "#eef8f5",
+    borderColor: "#0f766e",
   },
   waypointRowText: {
     flex: 1,
@@ -1032,9 +1246,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  waypointTabs: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  waypointTab: {
+    alignItems: "center",
+    backgroundColor: "#faf9f7",
+    borderColor: "#e6e1d8",
+    borderRadius: 8,
+    borderWidth: 1,
+    flexBasis: 108,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 42,
+    paddingHorizontal: 10,
+  },
+  waypointTabSelected: {
+    backgroundColor: "#eef8f5",
+    borderColor: "#0f766e",
+  },
+  waypointTabText: {
+    color: "#374151",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  waypointTabTextSelected: {
+    color: "#0f766e",
+  },
+  waypointTabMeta: {
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "800",
+    marginLeft: "auto",
+  },
+  waypointEditor: {
+    gap: 14,
+  },
   waypointForm: {
-    flex: 1.1,
-    minWidth: 320,
+    minWidth: 0,
   },
   actionButton: {
     alignItems: "center",
@@ -1100,6 +1351,34 @@ const styles = StyleSheet.create({
   statusBadgeTextActive: {
     color: "#0f766e",
   },
+  authTabs: {
+    backgroundColor: "#f3f4f6",
+    borderRadius: 8,
+    flexDirection: "row",
+    gap: 4,
+    marginBottom: 18,
+    padding: 4,
+  },
+  segmentButton: {
+    alignItems: "center",
+    borderRadius: 6,
+    flex: 1,
+    minHeight: 38,
+    justifyContent: "center",
+  },
+  segmentButtonActive: {
+    backgroundColor: "#ffffff",
+    borderColor: "#d1d5db",
+    borderWidth: 1,
+  },
+  segmentButtonText: {
+    color: "#4b5563",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  segmentButtonTextActive: {
+    color: "#111827",
+  },
   successText: {
     backgroundColor: "#dcfce7",
     borderColor: "#86efac",
@@ -1155,16 +1434,24 @@ const styles = StyleSheet.create({
     borderColor: "#ded8ce",
     borderRadius: 8,
     borderWidth: 1,
-    maxWidth: 440,
+    maxWidth: 460,
     padding: 22,
     width: "100%",
+  },
+  loginHeader: {
+    marginBottom: 18,
   },
   loginTitle: {
     color: "#111827",
     fontSize: 28,
     fontWeight: "900",
-    marginBottom: 22,
     marginTop: 4,
+  },
+  loginActions: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
   },
   errorText: {
     color: "#b91c1c",

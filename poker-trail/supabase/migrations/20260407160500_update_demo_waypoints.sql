@@ -12,6 +12,6 @@ from public.events,
     ('wp4', -41.4162774, 147.1427183),
     ('wp5', -41.4160891, 147.1429429)
 ) as updates(code, latitude, longitude)
-where events.slug = 'poker-run-demo'
+where events.slug = 'poker-trail-demo'
   and events.id = waypoints.event_id
   and waypoints.code = updates.code;

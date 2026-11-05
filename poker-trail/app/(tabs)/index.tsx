@@ -226,6 +226,9 @@ export default function Index() {
             </Pressable>
           </ScrollView>
         ) : null}
+        <View pointerEvents="box-none" style={[styles.syncOverlay, { bottom: layout.gap, left: layout.left, right: layout.right }]}>
+          <HandSyncStatus fontSize={layout.detailSize} />
+        </View>
       </View>
         <ScrollView style={[styles.bottomPanel, { maxHeight: layout.handPanelHeight }]} contentContainerStyle={[styles.handContent, { paddingLeft: layout.left, paddingRight: layout.right, paddingVertical: layout.gap * 1.5, gap: layout.gap / 2 }]} >
 
@@ -239,7 +242,6 @@ export default function Index() {
             />
           </View>
 
-          <HandSyncStatus color="#ffffff" fontSize={layout.detailSize} hideWhenSaved />
         </ScrollView>
     </View>
   );
@@ -273,6 +275,7 @@ const styles = StyleSheet.create({
     position: "relative",
     minHeight: 0,
   },
+  syncOverlay: { position: "absolute", zIndex: 4, alignItems: "center" },
   leaveButton: {
     position: "absolute",
     right: 16,

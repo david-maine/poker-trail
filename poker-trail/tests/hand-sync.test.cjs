@@ -15,9 +15,9 @@ test('local hand migration, concurrency, and immutable reconciliation', async t 
   await t.test('legacy pending hands retain every card; submitted hands migrate as acknowledged', async () => {
     const { local, storage } = localHarness();
     const legacy = { eventId, claims: [claim(0)], status: 'pending_submission', submittedAt: null, submissionAttemptCount: 1, lastSubmissionError: null, updatedAt: new Date().toISOString() };
-    storage.set('poker-run:local-hand:v1:' + eventId, JSON.stringify(legacy));
+    storage.set('poker-trail:local-hand:v1:' + eventId, JSON.stringify(legacy));
     assert.deepEqual((await local.getLocalHand(eventId)).acknowledgedWaypointIds, []);
-    storage.set('poker-run:local-hand:v1:' + eventId, JSON.stringify({ ...legacy, status: 'submitted' }));
+    storage.set('poker-trail:local-hand:v1:' + eventId, JSON.stringify({ ...legacy, status: 'submitted' }));
     assert.deepEqual((await local.getLocalHand(eventId)).acknowledgedWaypointIds, [claim(0).waypointId]);
   });
   await t.test('acknowledging an earlier upload retains a newly collected card as pending', async () => {
