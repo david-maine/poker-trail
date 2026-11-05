@@ -7,4 +7,12 @@ module.exports = defineConfig([
   {
     ignores: ['dist/*'],
   },
+  {
+    files: ['tests/**/*.cjs', 'scripts/**/*.cjs'],
+    languageOptions: { globals: { __dirname: 'readonly' } },
+  },
+  {
+    files: ['supabase/functions/**/*.ts'],
+    rules: { 'import/no-unresolved': ['error', { ignore: ['^npm:'] }] },
+  },
 ]);

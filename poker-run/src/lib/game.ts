@@ -50,9 +50,11 @@ type LeaderboardEntryRow = {
   best_hand_cards: string[];
   tiebreaker: number[];
   leaderboard_rank: number;
+  total_waypoints: number;
 };
 
-type SubmitHandResponse = {
+export type SubmitHandResponse = {
+  claims: LocalCardClaim[];
   run: {
     id: string;
     status: "active" | "completed" | "abandoned";
@@ -68,6 +70,7 @@ type SubmitHandResponse = {
 type HandSubmissionError = Error & {
   retryable?: boolean;
   alreadySubmitted?: boolean;
+  rejectedWaypointIds?: string[];
 };
 
 export type GameEvent = {
@@ -98,6 +101,7 @@ export type LeaderboardEntry = {
   bestHandCards: string[];
   tiebreaker: number[];
   leaderboardRank: number;
+  totalWaypoints: number;
 };
 
 export type LeaderboardSnapshot = {
@@ -255,7 +259,7 @@ export async function loadGameBootstrapForEvent(event: GameEvent): Promise<GameB
   };
 }
 
-export async function submitCompletedHand(eventId: string, claims: LocalCardClaim[]) {
+export async function syncHand(eventId: string, claims: LocalCardClaim[]) {
   const {
     data: { session },
     error: sessionError,
@@ -275,6 +279,7 @@ export async function submitCompletedHand(eventId: string, claims: LocalCardClai
 
   const score = evaluateBestHand(claims.map((claim) => claim.card));
   const { data, error } = await supabase.functions.invoke("submit-hand", {
+    timeout: 30000,
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       apikey: supabaseAnonKey,
@@ -305,6 +310,23 @@ export async function submitCompletedHand(eventId: string, claims: LocalCardClai
   return data as SubmitHandResponse;
 }
 
+// Kept for callers on the complete-hand API; the endpoint now also accepts partial hands.
+export const submitCompletedHand = syncHand;
+
+export async function loadAcceptedHand(eventId: string) {
+  const user = await getSessionUser();
+  if (!user) throw new Error("You are not signed in.");
+  return withReadTimeout(async signal => {
+  const { data: run, error } = await supabase.from("runs")
+    .select("id,status,finished_at").eq("event_id", eventId).eq("user_id", user.id).abortSignal(signal).maybeSingle();
+  if (error) throw error;
+  if (!run) throw new Error("Register for the event before collecting cards.");
+  const { data, error: claimError } = await supabase.from("run_card_claims").select("claim").eq("run_id", run.id).abortSignal(signal);
+  if (claimError) throw claimError;
+  return { claims: (data ?? []).map(row => row.claim as LocalCardClaim), completed: run.status === "completed", finishedAt: run.finished_at as string | null };
+  });
+}
+
 export async function loadLeaderboardSnapshotForEvent(
   event: GameEvent | null
 ): Promise<LeaderboardSnapshot> {
@@ -318,21 +340,23 @@ export async function loadLeaderboardSnapshotForEvent(
     };
   }
 
-  const { data, error } = await supabase
-    .from("leaderboard_entries")
-    .select(
-      "event_id, event_slug, event_name, run_id, user_id, player_label, run_status, started_at, finished_at, visit_count, best_hand_name, best_hand_rank, best_hand_cards, tiebreaker, leaderboard_rank"
-    )
-    .eq("event_id", event.id)
-    .order("leaderboard_rank", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
+  const rows: LeaderboardEntryRow[] = [];
+  await withReadTimeout(async signal => {
+    for (let offset = 0; ; offset += 1000) {
+      const { data, error } = await supabase.from("leaderboard_entries")
+        .select("event_id, event_slug, event_name, run_id, user_id, player_label, run_status, started_at, finished_at, visit_count, best_hand_name, best_hand_rank, best_hand_cards, tiebreaker, leaderboard_rank, total_waypoints")
+        .eq("event_id", event.id).order("leaderboard_rank", { ascending: true })
+        .range(offset, offset + 999).abortSignal(signal);
+      if (error) throw error;
+      const page = (data ?? []) as LeaderboardEntryRow[];
+      rows.push(...page);
+      if (page.length < 1000) break;
+    }
+  });
 
   return {
     event,
-    entries: ((data as LeaderboardEntryRow[] | null) ?? []).map((entry) => ({
+    entries: rows.map((entry) => ({
       eventId: entry.event_id,
       eventSlug: entry.event_slug,
       eventName: entry.event_name,
@@ -348,6 +372,7 @@ export async function loadLeaderboardSnapshotForEvent(
       bestHandCards: entry.best_hand_cards,
       tiebreaker: entry.tiebreaker,
       leaderboardRank: entry.leaderboard_rank,
+      totalWaypoints: entry.total_waypoints,
     })),
     currentUserId: user?.id ?? null,
   };
@@ -400,11 +425,13 @@ async function toReadableSubmissionError(error: unknown) {
 
     if (response) {
       try {
-        const payload = (await response.clone().json()) as { error?: unknown };
+        const payload = (await response.clone().json()) as { error?: unknown; rejectedWaypointIds?: unknown };
         if (typeof payload.error === "string" && payload.error.length > 0) {
           return createHandSubmissionError(payload.error, {
             alreadySubmitted: payload.error.toLowerCase().includes("already submitted"),
             retryable: response.status >= 500,
+            rejectedWaypointIds: Array.isArray(payload.rejectedWaypointIds)
+              ? payload.rejectedWaypointIds.filter((id): id is string => typeof id === "string") : undefined,
           });
         }
       } catch {
@@ -435,9 +462,10 @@ async function toReadableSubmissionError(error: unknown) {
 
 function createHandSubmissionError(
   message: string,
-  options: { retryable?: boolean; alreadySubmitted?: boolean } = {}
+  options: { retryable?: boolean; alreadySubmitted?: boolean; rejectedWaypointIds?: string[] } = {}
 ): HandSubmissionError {
   const error = new Error(message) as HandSubmissionError;
+  error.rejectedWaypointIds = options.rejectedWaypointIds;
   error.retryable = options.retryable;
   error.alreadySubmitted = options.alreadySubmitted;
   return error;
@@ -564,4 +592,11 @@ function normalizeVesselName(value: string | null | undefined) {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+async function withReadTimeout<T>(action: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try { return await action(controller.signal); }
+  finally { clearTimeout(timer); }
 }

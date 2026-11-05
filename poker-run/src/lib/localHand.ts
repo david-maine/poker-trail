@@ -1,3 +1,4 @@
+import { reconcileAcceptedHand } from "./handSyncState";
 import { drawCard, isValidCard } from "./cards";
 import { getSafeStorage } from "./safeStorage";
 
@@ -17,6 +18,8 @@ export type LocalCardClaim = {
 export type LocalHand = {
   eventId: string;
   claims: LocalCardClaim[];
+  acknowledgedWaypointIds: string[];
+  rejectedWaypointIds?: string[];
   status: LocalHandStatus;
   submittedAt: string | null;
   submissionAttemptCount: number;
@@ -57,6 +60,7 @@ export async function getLocalHand(eventId: string): Promise<LocalHand> {
     if (isLocalHand(parsed) && parsed.eventId === eventId) {
       return {
         ...parsed,
+        acknowledgedWaypointIds: parsed.acknowledgedWaypointIds ?? (parsed.status === "submitted" ? parsed.claims.map(c => c.waypointId) : []),
         lastSubmissionRetryable: parsed.lastSubmissionRetryable ?? false,
         claims: parsed.claims.sort(compareClaims),
       };
@@ -69,10 +73,26 @@ export async function getLocalHand(eventId: string): Promise<LocalHand> {
 }
 
 export async function addLocalCardClaim(input: ClaimInput) {
+  return withHandLock(input.eventId, () => collectCard(input));
+}
+
+async function collectCard(input: ClaimInput) {
   const hand = await getLocalHand(input.eventId);
   const existingClaim = hand.claims.find((claim) => claim.waypointId === input.waypointId);
 
   if (existingClaim) {
+    // An unaccepted card may be re-proved after a waypoint was edited. Keep its
+    // value; only replace the rejected GPS proof, never an accepted claim.
+    if (hand.status !== "submitted" && hand.rejectedWaypointIds?.includes(input.waypointId) &&
+        !hand.acknowledgedWaypointIds.includes(input.waypointId)) {
+      const claim = { ...existingClaim, claimedAt: new Date().toISOString(),
+        claimedLat: input.claimedLat, claimedLng: input.claimedLng, gpsAccuracyMeters: input.gpsAccuracyMeters };
+      const next = { ...hand, claims: hand.claims.map(current => current.waypointId === claim.waypointId ? claim : current),
+        rejectedWaypointIds: hand.rejectedWaypointIds.filter(id => id !== input.waypointId),
+        lastSubmissionError: null, lastSubmissionRetryable: false, updatedAt: new Date().toISOString() };
+      await saveLocalHand(next);
+      return { hand: next, claim, added: false };
+    }
     return {
       hand,
       claim: existingClaim,
@@ -112,46 +132,34 @@ export async function addLocalCardClaim(input: ClaimInput) {
   };
 }
 
-export async function markHandPendingSubmission(hand: LocalHand, lastSubmissionError: string | null = null) {
-  const nextHand: LocalHand = {
-    ...hand,
-    status: "pending_submission",
-    lastSubmissionError,
-    lastSubmissionRetryable: true,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await saveLocalHand(nextHand);
-  return nextHand;
+// Read the latest hand inside the lock: an upload may finish after another card is collected.
+export async function acknowledgeHand(eventId: string, accepted: LocalCardClaim[], completed: boolean, finishedAt: string | null) {
+  return withHandLock(eventId, async () => {
+    const hand = await getLocalHand(eventId);
+    const next = reconcileAcceptedHand(hand, accepted, completed, finishedAt);
+    await saveLocalHand(next);
+    return next;
+  });
 }
 
-export async function markHandSubmissionFailed(hand: LocalHand, message: string, retryable: boolean) {
-  const nextHand: LocalHand = {
-    ...hand,
-    status: "pending_submission",
-    submissionAttemptCount: hand.submissionAttemptCount + 1,
-    lastSubmissionError: message,
-    lastSubmissionRetryable: retryable,
-    updatedAt: new Date().toISOString(),
-  };
-
-  await saveLocalHand(nextHand);
-  return nextHand;
+export async function recordSyncFailure(eventId: string, message: string, retryable: boolean, rejectedWaypointIds?: string[]) {
+  return withHandLock(eventId, async () => {
+    const hand = await getLocalHand(eventId);
+    const next = { ...hand, lastSubmissionError: message, lastSubmissionRetryable: retryable,
+      rejectedWaypointIds: rejectedWaypointIds ?? hand.rejectedWaypointIds,
+      submissionAttemptCount: hand.submissionAttemptCount + 1 };
+    await saveLocalHand(next);
+    return next;
+  });
 }
 
-export async function markHandSubmitted(hand: LocalHand) {
-  const now = new Date().toISOString();
-  const nextHand: LocalHand = {
-    ...hand,
-    status: "submitted",
-    submittedAt: now,
-    lastSubmissionError: null,
-    lastSubmissionRetryable: false,
-    updatedAt: now,
-  };
-
-  await saveLocalHand(nextHand);
-  return nextHand;
+const handLocks = new Map<string, Promise<unknown>>();
+function withHandLock<T>(eventId: string, action: () => Promise<T>): Promise<T> {
+  const previous = handLocks.get(eventId) ?? Promise.resolve();
+  const next = previous.catch(() => {}).then(action);
+  handLocks.set(eventId, next);
+  void next.finally(() => { if (handLocks.get(eventId) === next) handLocks.delete(eventId); }).catch(() => {});
+  return next;
 }
 
 export async function saveLocalHand(hand: LocalHand) {
@@ -173,6 +181,7 @@ function createEmptyHand(eventId: string): LocalHand {
   return {
     eventId,
     claims: [],
+    acknowledgedWaypointIds: [],
     status: "collecting",
     submittedAt: null,
     submissionAttemptCount: 0,

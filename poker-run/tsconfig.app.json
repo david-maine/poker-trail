@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["app-example", "supabase/functions", "node_modules", "dist"]
+}

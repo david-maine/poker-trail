@@ -4,55 +4,8 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { OrganiserWaypoint } from "../lib/organiser";
 import type { WaypointMapPoint } from "./OrganiserWaypointMap";
 
-type GoogleLatLng = {
-  lat: () => number;
-  lng: () => number;
-};
-
-type GoogleMapMouseEvent = {
-  latLng?: GoogleLatLng | null;
-};
-
-type GoogleMapsApi = {
-  Circle: new (options: Record<string, unknown>) => GoogleCircle;
-  LatLngBounds: new () => GoogleBounds;
-  Map: new (element: HTMLElement, options: Record<string, unknown>) => GoogleMap;
-  Marker: new (options: Record<string, unknown>) => GoogleMarker;
-  SymbolPath: {
-    CIRCLE: number;
-  };
-};
-
-type GoogleBounds = {
-  extend: (point: GooglePoint) => void;
-};
-
-type GoogleCircle = {
-  setCenter: (point: GooglePoint | null) => void;
-  setMap: (map: GoogleMap | null) => void;
-  setOptions: (options: Record<string, unknown>) => void;
-  setRadius: (radius: number) => void;
-};
-
-type GoogleMap = {
-  addListener: (eventName: string, listener: (event: GoogleMapMouseEvent) => void) => void;
-  fitBounds: (bounds: GoogleBounds) => void;
-  setCenter: (point: GooglePoint) => void;
-  setZoom: (zoom: number) => void;
-};
-
-type GoogleMarker = {
-  addListener: (eventName: string, listener: (event: GoogleMapMouseEvent) => void) => void;
-  setMap: (map: GoogleMap | null) => void;
-};
-
-type GoogleWindow = Window &
-  typeof globalThis & {
-    gm_authFailure?: () => void;
-    google?: {
-      maps?: GoogleMapsApi;
-    };
-  };
+import { loadGoogleMaps, mapsApiKey } from "../lib/googleMaps.web";
+import type { GoogleMapsApi, GoogleCircle, GoogleMap, GoogleMarker, GoogleWindow, GoogleLatLng, GooglePoint } from "../lib/googleMaps.web";
 
 type Props = {
   currentPoint: WaypointMapPoint | null;
@@ -61,17 +14,6 @@ type Props = {
   waypoints: OrganiserWaypoint[];
   onPick: (point: WaypointMapPoint) => void;
 };
-
-type GooglePoint = {
-  lat: number;
-  lng: number;
-};
-
-const mapsApiKey =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY ??
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-const googleMapsScriptId = "google-maps-js-api";
-let mapsLoadPromise: Promise<GoogleMapsApi> | null = null;
 
 export default function OrganiserWaypointMap({
   currentPoint,
@@ -456,61 +398,6 @@ function MapMessage({ text, title }: { text: string; title: string }) {
       <Text style={styles.messageText}>{text}</Text>
     </View>
   );
-}
-
-function loadGoogleMaps() {
-  const googleWindow = window as GoogleWindow;
-
-  if (googleWindow.google?.maps) {
-    return Promise.resolve(googleWindow.google.maps);
-  }
-
-  if (!mapsApiKey) {
-    return Promise.reject(new Error("Google Maps API key is missing."));
-  }
-
-  if (mapsLoadPromise) {
-    return mapsLoadPromise;
-  }
-
-  mapsLoadPromise = new Promise((resolve, reject) => {
-    const existingScript = document.getElementById(googleMapsScriptId) as HTMLScriptElement | null;
-
-    if (existingScript) {
-      existingScript.addEventListener("load", () => {
-        const maps = googleWindow.google?.maps;
-        if (maps) {
-          resolve(maps);
-        } else {
-          reject(new Error("Google Maps loaded without a maps API."));
-        }
-      });
-      existingScript.addEventListener("error", () => {
-        reject(new Error("Google Maps failed to load."));
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.async = true;
-    script.defer = true;
-    script.id = googleMapsScriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(mapsApiKey)}`;
-    script.onload = () => {
-      const maps = googleWindow.google?.maps;
-      if (maps) {
-        resolve(maps);
-      } else {
-        reject(new Error("Google Maps loaded without a maps API."));
-      }
-    };
-    script.onerror = () => {
-      reject(new Error("Google Maps failed to load. Check the browser key and Maps JavaScript API settings."));
-    };
-    document.head.appendChild(script);
-  });
-
-  return mapsLoadPromise;
 }
 
 function toPoint(latLng: GoogleLatLng | null | undefined): WaypointMapPoint | null {

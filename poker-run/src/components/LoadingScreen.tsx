@@ -1,11 +1,5 @@
-import { useEffect, useRef } from "react";
-import {
-  Animated,
-  Easing,
-  ImageBackground,
-  StyleSheet,
-  View,
-} from "react-native";
+import { APP_BACKGROUND_COLOR } from "../lib/theme";
+import { StyleSheet, Text, View } from "react-native";
 
 type LoadingScreenProps = {
   accessibilityLabel?: string;
@@ -14,46 +8,12 @@ type LoadingScreenProps = {
 export default function LoadingScreen({
   accessibilityLabel = "Loading",
 }: LoadingScreenProps) {
-  const rotation = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(rotation, {
-        toValue: 1,
-        duration: 1200,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, [rotation]);
-
-  const rotate = rotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
   return (
-    <ImageBackground
-      source={require("../../assets/images/loading-background.png")}
-      style={styles.background}
-      resizeMode="cover"
-    >
-      <View style={styles.content}>
-        <Animated.Image
-          accessibilityLabel={accessibilityLabel}
-          accessibilityRole="image"
-          source={require("../../assets/images/loading-icon.png")}
-          style={[styles.icon, { transform: [{ rotate }] }]}
-          resizeMode="contain"
-        />
-      </View>
-    </ImageBackground>
+    <View style={styles.background}>
+      <Text accessibilityLiveRegion="polite" style={styles.message}>
+        {accessibilityLabel}…
+      </Text>
+    </View>
   );
 }
 
@@ -61,14 +21,14 @@ const styles = StyleSheet.create({
   background: {
     flex: 1,
     width: "100%",
-  },
-  content: {
-    flex: 1,
+    backgroundColor: APP_BACKGROUND_COLOR,
     alignItems: "center",
     justifyContent: "center",
+    padding: 24,
   },
-  icon: {
-    height: 96,
-    width: 96,
+  message: {
+    color: "#ffffff",
+    fontSize: 16,
+    textAlign: "center",
   },
 });

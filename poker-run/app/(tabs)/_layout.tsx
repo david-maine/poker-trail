@@ -1,11 +1,17 @@
+import { APP_BACKGROUND_COLOR } from "../../src/lib/theme";
+import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
+import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Medium_Italic";
+import { useFonts } from "expo-font";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Href, router, Tabs } from "expo-router";
 
+import TrailTabBar from "../../src/components/TrailTabBar";
 import LoadingScreen from "../../src/components/LoadingScreen";
 import { useEventSession } from "../../src/lib/eventSession";
 
 export default function TabLayout() {
+  const [fontsLoaded, fontError] = useFonts({ RobotoSlab_800ExtraBold, Montserrat_500Medium_Italic });
   const { registrationState } = useEventSession();
   const headerTitle = registrationState.event?.name ?? "Poker Run";
   const [ready, setReady] = useState(false);
@@ -52,34 +58,28 @@ export default function TabLayout() {
     };
   }, [registrationState.event, registrationState.requiresRegistration]);
 
-  if (!ready) {
+  if (!ready || (!fontsLoaded && !fontError)) {
     return <LoadingScreen accessibilityLabel="Checking registration" />;
   }
 
-  if (errorMessage) {
+  if (errorMessage || fontError) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.errorText}>{errorMessage}</Text>
+        <Text style={styles.errorText}>{errorMessage ?? "The page font could not load. Reload to try again."}</Text>
       </View>
     );
   }
 
   return (
     <Tabs
-      screenOptions={{
-        headerTitle,
-        tabBarIcon: () => null,
-        tabBarIconStyle: styles.hiddenTabIcon,
-        tabBarItemStyle: styles.tabItem,
-        tabBarLabelPosition: "beside-icon",
-        tabBarLabelStyle: styles.tabLabel,
-      }}
+      tabBar={props => <TrailTabBar {...props} />}
+      screenOptions={{ headerTitle, headerShown: false, sceneStyle: { backgroundColor: APP_BACKGROUND_COLOR } }}
     >
       <Tabs.Screen
         name="index"
         options={{
           headerShown: false,
-          tabBarStyle: styles.hiddenTabBar,
+          tabBarLabel: "Map",
         }}
       />
       <Tabs.Screen
@@ -87,7 +87,6 @@ export default function TabLayout() {
         options={{
           headerShown: false,
           tabBarLabel: "Leaderboard",
-          tabBarStyle: styles.hiddenTabBar,
         }}
       />
     </Tabs>
@@ -99,27 +98,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#25292e",
+    backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 24,
   },
   errorText: {
     color: "#ff8a80",
     fontSize: 16,
-    textAlign: "center",
-  },
-  hiddenTabIcon: {
-    display: "none",
-  },
-  hiddenTabBar: {
-    display: "none",
-  },
-  tabItem: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabLabel: {
-    fontSize: 16,
-    fontWeight: "700",
     textAlign: "center",
   },
 });

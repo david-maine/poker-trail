@@ -1,23 +1,33 @@
-import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 
+import { TRAIL_INK } from "../lib/theme";
 import PlayingCard from "./PlayingCard";
+import { getCardRowLayout } from "../lib/responsiveLayout";
 
 type Props = {
   visitOrder: string[];
   waypointCards: Record<string, string | null>;
   pendingWaypointIds?: Record<string, boolean>;
   total: number;
+  maxCardHeight?: number;
+  gap?: number;
 };
 
-export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds = {}, total }: Props) {
+export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds = {}, total, maxCardHeight = 120, gap = 8 }: Props) {
+  const window = useWindowDimensions();
+  const [width, setWidth] = useState(0);
+  const count = Math.max(total, visitOrder.length);
+  const cards = getCardRowLayout(width || window.width - 48, count, maxCardHeight, gap);
   return (
-    <View style={styles.cardsRow}>
+    <View style={{ width: "100%", height: cards.height }} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
+    <ScrollView horizontal scrollEnabled={cards.scrollable} showsHorizontalScrollIndicator={cards.scrollable}
+      contentContainerStyle={[styles.cardsRow, { gap: cards.gap }]}>
       {visitOrder.map((wpId) => {
         const card = waypointCards[wpId];
         const isPending = pendingWaypointIds[wpId];
         return (
-          <View key={wpId} style={styles.cardSlot}>
+          <View key={wpId} style={[styles.cardSlot, { width: cards.width, height: cards.height }]}>
             {card ? (
               <PlayingCard card={card} />
             ) : isPending ? (
@@ -31,10 +41,11 @@ export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds 
         );
       })}
       {Array.from({ length: Math.max(0, total - visitOrder.length) }).map((_, i) => (
-        <View key={`empty-${i}`} style={styles.cardSlot}>
+        <View key={`empty-${i}`} style={[styles.cardSlot, { width: cards.width, height: cards.height }]}>
           <View style={styles.cardBack} />
         </View>
       ))}
+    </ScrollView>
     </View>
   );
 }
@@ -42,14 +53,12 @@ export default function CardRow({ visitOrder, waypointCards, pendingWaypointIds 
 const styles = StyleSheet.create({
   cardsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
+    justifyContent: "center",
+    minWidth: "100%",
     paddingHorizontal: 0,
   },
   cardSlot: {
-    width: "18%",
-    aspectRatio: 58 / 82,
-    borderRadius: 7,
+    borderRadius: 8,
     backgroundColor: "transparent",
     justifyContent: "center",
     alignItems: "center",
@@ -57,15 +66,15 @@ const styles = StyleSheet.create({
   cardBack: {
     width: "100%",
     height: "100%",
-    borderColor: "#262412",
-    borderRadius: 7,
+    borderColor: TRAIL_INK,
+    borderRadius: 8,
     borderWidth: 3,
-    backgroundColor: "#625d52",
+    backgroundColor: TRAIL_INK,
   },
   pendingCard: {
     width: "100%",
     height: "100%",
-    borderRadius: 7,
+    borderRadius: 8,
     backgroundColor: "#35515e",
     borderColor: "#8ecae6",
     borderStyle: "dashed",

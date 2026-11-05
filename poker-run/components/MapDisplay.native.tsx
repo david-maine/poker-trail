@@ -1,9 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useRef } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Circle, Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 
 import { Waypoint } from "../src/types";
+import type { MapControlLayout } from "../src/lib/responsiveLayout";
 
 type UserLocation = {
   latitude: number;
@@ -15,11 +15,11 @@ type Props = {
   waypoints: Waypoint[];
   visited: Record<string, boolean>;
   userLocation: UserLocation;
+  controls?: MapControlLayout;
 };
 
-const mapInsets = { bottom: 290, left: 16, right: 16, top: 112 };
-
-export default function MapDisplay({ waypoints, visited, userLocation }: Props) {
+export default function MapDisplay({ waypoints, visited, userLocation, controls = { top: 56, left: 16, size: 48 } }: Props) {
+  const mapInsets = { bottom: 16, left: 16, right: 16, top: controls.top + controls.size + 12 };
   const mapRef = useRef<MapView | null>(null);
   const initialRegion: Region = userLocation
     ? {
@@ -95,17 +95,19 @@ export default function MapDisplay({ waypoints, visited, userLocation }: Props) 
         onPress={handleRecenter}
         style={({ pressed }) => [
           styles.recenterButton,
+          { top: controls.top, left: controls.left, width: controls.size, height: controls.size, borderRadius: controls.size / 2 },
           pressed ? styles.recenterButtonPressed : null,
           !userLocation ? styles.recenterButtonDisabled : null,
         ]}
       >
-        <Feather name="crosshair" size={22} color="#1f2937" />
+        <Image accessible={false} source={require("../assets/images/POKER-TRAIL-icon-location.png")} resizeMode="contain" style={styles.controlIcon} />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  controlIcon: { width: "100%", height: "100%" },
   container: {
     height: "100%",
     position: "relative",

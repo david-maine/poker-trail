@@ -1,113 +1,154 @@
-import { Href, router } from "expo-router";
-import { useEffect, useState } from "react";
-import { ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE } from "../src/lib/theme";
+import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Medium_Italic";
+import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
+import { useFonts } from "expo-font";
+import { router } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
+import TrailBrandArtwork from "../src/components/TrailBrandArtwork";
+import useResponsiveLayout from "../src/hooks/useResponsiveLayout";
 import LoadingScreen from "../src/components/LoadingScreen";
-import LeaveEventButton from "../src/components/LeaveEventButton";
 import { useEventSession } from "../src/lib/eventSession";
-import { registerVesselNameForEvent } from "../src/lib/game";
+import { loadRegistrationStateForEventCode, registerVesselNameForEvent } from "../src/lib/game";
+import { getLandingTypography, LANDING_BUTTON_FONT, LANDING_INPUT_FONT } from "../src/lib/landingTypography";
 
 export default function RegisterScreen() {
+  const layout = useResponsiveLayout();
+  // Keep the full viewport height when the keyboard reduces the available space.
+  // A width change (including rotation) establishes a new responsive size.
+  const artworkViewport = useRef({ width: layout.width, height: layout.height });
+  if (artworkViewport.current.width !== layout.width) {
+    artworkViewport.current = { width: layout.width, height: layout.height };
+  } else {
+    artworkViewport.current.height = Math.max(artworkViewport.current.height, layout.height);
+  }
+  const artworkWidth = Math.min(layout.contentWidth, 460, Math.max(160, artworkViewport.current.height * 0.58) * 1241 / 1750);
+  const formWidth = Math.min(layout.contentWidth * 0.82, 380);
+  const typography = getLandingTypography(formWidth, layout.fontScale);
+  const controlHeight = Math.max(layout.fieldHeight, typography.minControlHeight);
+  const [fontsLoaded, fontError] = useFonts({ Montserrat_500Medium_Italic, RobotoSlab_800ExtraBold });
   const { registrationState, setRegistrationState } = useEventSession();
+  const [eventCode, setEventCode] = useState(registrationState.event?.eventCode ?? "");
   const [vesselName, setVesselName] = useState("");
+  const nameInput = useRef<TextInput>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const event = registrationState.event;
+  const [showRequiredFields, setShowRequiredFields] = useState(false);
+  const missingEventCode = showRequiredFields && !eventCode.trim();
+  const missingVesselName = showRequiredFields && !vesselName.trim();
 
   useEffect(() => {
-    if (!event) {
-      router.replace("/event-code" as Href);
+    if (!registrationState.event || !registrationState.isRegistered) {
       return;
     }
 
-    if (registrationState.isRegistered) {
-      router.replace("/(tabs)");
-    }
-  }, [event, registrationState.isRegistered]);
+    router.replace("/(tabs)");
+  }, [registrationState.event, registrationState.isRegistered]);
 
   async function submit() {
-    if (!event) {
+    if (submitting) return;
+    setErrorMessage(null);
+    setShowRequiredFields(true);
+    if (!eventCode.trim() || !vesselName.trim()) {
+      if (eventCode.trim()) nameInput.current?.focus();
       return;
     }
-
     setSubmitting(true);
     setErrorMessage(null);
 
     try {
-      const nextRegistrationState = await registerVesselNameForEvent(event, vesselName);
+      const eventState = await loadRegistrationStateForEventCode(eventCode);
+      const nextRegistrationState = eventState.requiresRegistration && eventState.event
+        ? await registerVesselNameForEvent(eventState.event, vesselName)
+        : eventState;
       setRegistrationState(nextRegistrationState);
       router.replace("/(tabs)");
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to register your vessel."));
+      setErrorMessage(getErrorMessage(error, "Unable to join that event."));
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (!event || registrationState.isRegistered) {
-    return <LoadingScreen accessibilityLabel="Loading registration" />;
+  if (fontError) {
+    return <View style={[styles.backgroundContainer, styles.fontError]}><Text style={styles.errorText}>The page fonts could not load. Reload to try again.</Text></View>;
+  }
+
+  if (!fontsLoaded || (registrationState.event && registrationState.isRegistered)) {
+    return <LoadingScreen accessibilityLabel="Loading event" />;
   }
 
   return (
-    <View style={styles.backgroundContainer}>
-    {/* <SafeAreaView style={styles.backgroundContainer} edges={["top"]}> */}
-    <LeaveEventButton style={styles.leaveButton} />
-    <ImageBackground
-      source={require("../assets/images/landingpage.png")}
-      style={styles.background}
-      resizeMode="cover"
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={-100}
-        style={styles.keyboardAvoidingContainer}
-      >
-        <View style={styles.container}>
-          <ImageBackground
-            source={require("../assets/images/landing-icon.png")}
-            style={styles.card}
-            imageStyle={styles.cardBackgroundIcon}
-            resizeMode="stretch"
-          >
-            <TextInput
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!submitting}
-              maxLength={40}
-              onChangeText={setVesselName}
-              placeholder="Name your vessel"
-              placeholderTextColor="#7f8c96"
-              style={styles.input}
-              value={vesselName}
-            />
+    <View onLayout={layout.onLayout} style={styles.backgroundContainer}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingContainer}
+        >
+          <ScrollView contentContainerStyle={[styles.container, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: layout.controlTop, paddingBottom: layout.bottom }]} keyboardShouldPersistTaps="handled">
+            <View style={styles.card}>
+              <View style={{ marginBottom: layout.gap * 2 }}>
+                <TrailBrandArtwork width={artworkWidth} />
+              </View>
+              <View style={[styles.form, { width: formWidth }]}>
+              <TextInput
+                accessibilityLabel="Event code"
+                returnKeyType="next"
+                onSubmitEditing={() => nameInput.current?.focus()}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!submitting}
+                maxLength={10}
+                onChangeText={setEventCode}
+                placeholder="EVENT CODE"
+                placeholderTextColor={missingEventCode ? "#ffd2cc" : TRAIL_WHITE}
+                style={[styles.input, { height: controlHeight, fontSize: typography.inputFontSize, marginBottom: layout.gap }, missingEventCode && styles.missingInput]}
+                value={eventCode}
+              />
 
-            {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+              <TextInput
+                ref={nameInput}
+                accessibilityLabel="Vessel name"
+                autoCapitalize="words"
+                autoCorrect={false}
+                editable={!submitting}
+                maxLength={40}
+                onChangeText={setVesselName}
+                onSubmitEditing={() => { void submit(); }}
+                returnKeyType="go"
+                placeholder="NAME"
+                placeholderTextColor={missingVesselName ? "#ffd2cc" : TRAIL_WHITE}
+                style={[styles.input, { height: controlHeight, fontSize: typography.inputFontSize, marginBottom: layout.gap }, missingVesselName && styles.missingInput]}
+                value={vesselName}
+              />
+              {errorMessage ? <Text accessibilityRole="alert" style={styles.errorText}>{errorMessage}</Text> : null}
 
-            <Pressable
-              accessibilityLabel={submitting ? "Saving vessel name" : "Set sail"}
-              accessibilityRole="button"
-              disabled={submitting}
-              onPress={() => {
-                void submit();
-              }}
-              style={[styles.button, submitting ? styles.buttonDisabled : null]}
-            >
-              <ImageBackground
-                source={require("../assets/images/landing-Set-Sail.png")}
-                style={styles.buttonImage}
-                imageStyle={styles.buttonImageAsset}
-                resizeMode="contain"
+              <Pressable
+                accessibilityLabel={submitting ? "Joining event" : "Join the hunt"}
+                accessibilityRole="button"
+                disabled={submitting}
+                onPress={() => {
+                  void submit();
+                }}
+                style={[styles.button, { minHeight: controlHeight }, submitting ? styles.buttonDisabled : null]}
               >
-                <Text style={styles.buttonText}>
-                  {submitting ? "Saving..." : "SET SAIL"}
+                <Text style={[styles.buttonText, { fontSize: typography.buttonFontSize }]}>
+                  {submitting ? "JOINING..." : "JOIN THE HUNT"}
                 </Text>
-              </ImageBackground>
-            </Pressable>
-          </ImageBackground>
-        </View>
-      </KeyboardAvoidingView>
-    </ImageBackground>
-    {/* </SafeAreaView> */}
+              </Pressable>
+              </View>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
     </View>
   );
 }
@@ -128,119 +169,71 @@ function getErrorMessage(error: unknown, fallback: string) {
 }
 
 const styles = StyleSheet.create({
+  fontError: { alignItems: "center", justifyContent: "center", padding: 24 },
   backgroundContainer: {
     flex: 1,
-    backgroundColor: "#25292e",
-  },
-  leaveButton: {
-    position: "absolute",
-    right: 18,
-    top: 48,
-    zIndex: 5,
-  },
-  background: {
-    flex: 1,
-    backgroundColor: "#25292e",
+    backgroundColor: APP_BACKGROUND_COLOR,
   },
   keyboardAvoidingContainer: {
     flex: 1,
     width: "100%",
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
-    justifyContent: "flex-end",
-    paddingHorizontal: 58,
-    paddingBottom: 120,
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 48,
   },
-  card: {
-    width: "100%",
-    borderRadius: 18,
-    paddingHorizontal: 0,
-    paddingVertical: 20,
-    overflow: "hidden",
+  card: { width: "100%", maxWidth: 460,
+    alignItems: "center",
   },
-  cardBackgroundIcon: {
-    opacity: 1,
-  },
-  eyebrow: {
-    color: "#9ad0f5",
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "800",
-    marginTop: 8,
-  },
-  subtitle: {
-    color: "#c7d1d8",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
-  },
-  label: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
-    marginTop: 20,
-    marginBottom: 8,
-  },
+  form: { alignSelf: "center" },
   input: {
-    borderRadius: 0,
+    height: 56,
+    borderRadius: 12,
     borderWidth: 3,
-    borderColor: "#202542",
-    marginHorizontal: 26,
-    marginVertical: 12,
+    borderColor: TRAIL_WHITE,
+    backgroundColor: "transparent",
+    marginTop: 0,
+    marginBottom: 12,
     paddingHorizontal: 20,
     paddingVertical: 12,
-    color: "#202542",
+    color: TRAIL_WHITE,
     textAlign: "center",
-    fontSize: 16,
-    fontFamily: "Stoke-Regular",
+    fontSize: 18,
+    fontFamily: LANDING_INPUT_FONT,
+    letterSpacing: 0,
   },
-  helperText: {
-    color: "#9fb0ba",
-    fontSize: 13,
-    marginTop: 10,
-    fontFamily: "Stoke-Regular",
+  missingInput: {
+    color: "#ffd2cc",
   },
   errorText: {
-    color: "#ff8a80",
+    color: "#ffb4ab",
     fontSize: 14,
-    marginTop: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
   },
   button: {
     marginTop: 0,
     paddingHorizontal: 20,
-    width: "100%",
-    aspectRatio: 3142 / 685,
-    borderRadius: 0,
+    paddingVertical: 8,
+    backgroundColor: TRAIL_WHITE,
+    borderColor: TRAIL_INK,
+    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
   },
   buttonDisabled: {
     opacity: 0.7,
   },
-  buttonImage: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  buttonImageAsset: {
-    borderRadius: 0,
-  },
   buttonText: {
-    color: "#D1CCB9",
-    fontSize: 24,
-    fontWeight: "800",
-    fontFamily: "Stoke-Regular",
-  },
-  message: {
-    marginTop: 12,
-    color: "#ffffff",
-    fontSize: 16,
+    color: TRAIL_INK,
+    fontSize: 22,
+    fontFamily: LANDING_BUTTON_FONT,
     textAlign: "center",
   },
 });

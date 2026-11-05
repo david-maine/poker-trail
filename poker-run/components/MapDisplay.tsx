@@ -1,1 +1,1 @@
-export { default } from "../src/components/MapDisplay";
+export { default } from "../src/components/MapDisplay.web";

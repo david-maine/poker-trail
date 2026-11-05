@@ -1,187 +1,99 @@
+import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE, TRAIL_DISPLAY_FONT, TRAIL_BODY_FONT } from "../../src/lib/theme";
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Image, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import LeaveEventButton from "../../src/components/LeaveEventButton";
+import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
+import { getCardRowLayout } from "../../src/lib/responsiveLayout";
 import LoadingScreen from "../../src/components/LoadingScreen";
 import PlayingCard from "../../src/components/PlayingCard";
 import { useEventSession } from "../../src/lib/eventSession";
 import {
-  GameEvent,
   LeaderboardEntry,
   loadLeaderboardSnapshotForEvent,
 } from "../../src/lib/game";
-import { getLocalHand, subscribeToLocalHandChanges } from "../../src/lib/localHand";
+import { addConnectivityListener } from "../../src/lib/connectivity";
+import { supabase } from "../../src/lib/supabase";
+import HandSyncStatus from "../../src/components/HandSyncStatus";
 
 export default function LeaderboardScreen() {
+  const layout = useResponsiveLayout(false);
+  // Keep the 75pt reference size proportional to the visible leaderboard width.
+  const playerNameSize = 75 * Math.min(layout.contentWidth, layout.contentMaxWidth) / 1241;
+  const entryDetailSize = 50 * Math.min(layout.contentWidth, layout.contentMaxWidth) / 1241;
+  const cards = getCardRowLayout(Math.min(layout.contentWidth, layout.contentMaxWidth), 5, layout.cardHeight, layout.cardGap);
   const { registrationState } = useEventSession();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [checkingAccess, setCheckingAccess] = useState(true);
-  const [leaderboardUnlocked, setLeaderboardUnlocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const isRequestInFlightRef = useRef(false);
-  const leaderboardUnlockedRef = useRef(false);
-  const eventRef = useRef<GameEvent | null>(registrationState.event);
+  const inFlight = useRef(new Set<string>());
+  const refreshQueued = useRef(new Set<string>());
   const event = registrationState.event;
-
-  function setLeaderboardAccess(unlocked: boolean) {
-    leaderboardUnlockedRef.current = unlocked;
-    setLeaderboardUnlocked(unlocked);
-  }
+  const eventId = event?.id ?? "";
+  const activeEvent = useRef(eventId);
 
   useEffect(() => {
-    eventRef.current = event;
-  }, [event]);
-
-  useEffect(() => {
-    let isMounted = true;
-    let unsubscribeFromLocalHandChanges: (() => void) | null = null;
-
-    async function checkLeaderboardAccess() {
-      setCheckingAccess(true);
-      setErrorMessage(null);
-
-      try {
-        if (!isMounted) {
-          return;
-        }
-
-        if (!event) {
-          setLeaderboardAccess(true);
-          setCheckingAccess(false);
-          void refreshLeaderboard(true);
-          return;
-        }
-
-        const eventId = event.id;
-        const localHand = await getLocalHand(eventId);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const isSubmitted = localHand.status === "submitted";
-        setLeaderboardAccess(isSubmitted);
-        setCheckingAccess(false);
-
-        if (isSubmitted) {
-          void refreshLeaderboard(true);
-        } else {
-          setLoading(false);
-        }
-
-        unsubscribeFromLocalHandChanges = subscribeToLocalHandChanges((nextHand) => {
-          if (nextHand.eventId !== eventId) {
-            return;
-          }
-
-          const isNextSubmitted = nextHand.status === "submitted";
-          setLeaderboardAccess(isNextSubmitted);
-
-          if (isNextSubmitted) {
-            void refreshLeaderboard(true);
-          } else {
-            setEntries([]);
-            setCurrentUserId(null);
-          }
-        });
-      } catch (error) {
-        if (isMounted) {
-          setErrorMessage(getErrorMessage(error, "Unable to confirm your hand status."));
-          setCheckingAccess(false);
-          setLoading(false);
-        }
-      }
-    }
-
-    void checkLeaderboardAccess();
-
-    return () => {
-      isMounted = false;
-      unsubscribeFromLocalHandChanges?.();
-    };
-  }, [event]);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!leaderboardUnlockedRef.current) {
-        return;
-      }
-
-      void refreshLeaderboard(false);
-
-      const intervalId = setInterval(() => {
-        void refreshLeaderboard(false);
-      }, 10000);
-
-      return () => {
-        clearInterval(intervalId);
-      };
-    }, [])
-  );
-
-  async function refreshLeaderboard(showSpinner: boolean) {
-    if (!leaderboardUnlockedRef.current) {
-      return;
-    }
-
-    if (isRequestInFlightRef.current) {
-      return;
-    }
-
-    isRequestInFlightRef.current = true;
-
-    if (showSpinner) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
-
+    activeEvent.current = eventId;
+    setEntries([]);
+    setCurrentUserId(null);
     setErrorMessage(null);
+    setLoading(true);
+    return () => { activeEvent.current = ""; };
+  }, [eventId]);
 
+  const refreshLeaderboard = useCallback(async function refreshEntries(showSpinner: boolean) {
+    if (!event) return;
+    if (inFlight.current.has(event.id)) { refreshQueued.current.add(event.id); return; }
+    const id = event.id;
+    inFlight.current.add(id);
+    if (showSpinner) setLoading(true);
+    else setRefreshing(true);
     try {
-      const snapshot = await loadLeaderboardSnapshotForEvent(eventRef.current);
+      const snapshot = await loadLeaderboardSnapshotForEvent(event);
+      if (activeEvent.current !== id) return;
       setEntries(snapshot.entries);
       setCurrentUserId(snapshot.currentUserId);
+      setErrorMessage(null);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to load the leaderboard."));
+      if (activeEvent.current === id) setErrorMessage(getErrorMessage(error, "Unable to load the leaderboard."));
     } finally {
-      isRequestInFlightRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      inFlight.current.delete(id);
+      if (activeEvent.current === id) {
+        setLoading(false); setRefreshing(false);
+        if (refreshQueued.current.delete(id)) void refreshEntries(false);
+      }
     }
-  }
+  }, [event]);
 
-  const visibleEntries = [...testLeaderboardEntries, ...entries];
-  const visibleCurrentUserId = currentUserId ?? testLeaderboardCurrentUserId;
+  useFocusEffect(useCallback(() => {
+    if (!eventId) return;
+    void refreshLeaderboard(false);
+    let debounce: ReturnType<typeof setTimeout>;
+    const refresh = () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(() => { void refreshLeaderboard(false); }, 150);
+    };
+    const channel = supabase.channel("leaderboard:" + eventId)
+      .on("postgres_changes", { event: "*", schema: "public", table: "event_leaderboard_updates", filter: "event_id=eq." + eventId }, refresh)
+      .subscribe(status => { if (status === "SUBSCRIBED") refresh(); });
+    const interval = setInterval(refresh, 10000);
+    const disconnect = addConnectivityListener(online => { if (online) refresh(); });
+    const appState = AppState.addEventListener("change", state => { if (state === "active") refresh(); });
+    return () => {
+      clearTimeout(debounce);
+      clearInterval(interval);
+      disconnect();
+      appState.remove();
+      void supabase.removeChannel(channel);
+    };
+  }, [eventId, refreshLeaderboard]));
 
-  if (checkingAccess) {
-    return <LoadingScreen accessibilityLabel="Checking hand status" />;
-  }
-
-  if (!leaderboardUnlocked) {
-    return (
-      <View style={styles.centered}>
-        <LeaveEventButton style={styles.leaveButton} />
-        <Text style={styles.emptyTitle}>Submit your hand to unlock the leaderboard</Text>
-        <Text style={styles.emptyText}>
-          The leaderboard will appear after your hand has been accepted.
-        </Text>
-        <Pressable
-          onPress={() => {
-            router.replace("/");
-          }}
-          style={styles.lockedButton}
-        >
-          <Text style={styles.refreshButtonText}>Return Home</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  const visibleEntries = entries;
+  const visibleCurrentUserId = currentUserId;
 
   if (loading && visibleEntries.length === 0) {
     return <LoadingScreen accessibilityLabel="Loading leaderboard" />;
@@ -206,26 +118,33 @@ export default function LeaderboardScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <LeaveEventButton style={styles.leaveButton} />
-      <ImageBackground
-        source={require("../../assets/images/leaderboard-background.png")}
-        style={styles.background}
-        resizeMode="stretch"
+    <View onLayout={layout.onLayout} style={styles.container}>
+      <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={refreshing ? "Refreshing leaderboard" : "Refresh leaderboard"}
+        accessibilityState={{ busy: refreshing, disabled: refreshing }}
+        disabled={refreshing}
+        onPress={() => { void refreshLeaderboard(false); }}
+        style={({ pressed }) => [styles.floatingRefresh, {
+          top: layout.controlTop, left: layout.left, width: layout.controlSize,
+          height: layout.controlSize, borderRadius: layout.controlSize / 2,
+        }, (pressed || refreshing) && styles.refreshDimmed]}
       >
+        <Ionicons name="refresh" size={layout.controlSize * 0.6} color={APP_BACKGROUND_COLOR} />
+      </Pressable>
+      <View style={[styles.trophyHeader, { paddingTop: layout.controlTop, paddingBottom: layout.gap, paddingLeft: layout.left, paddingRight: layout.right }]}>
+        <Image accessible={false} source={require("../../assets/images/POKER-TRAIL-trophy.png")} resizeMode="contain"
+          style={{ width: Math.min(160, Math.max(72, layout.height * 0.18)) * 392 / 454, height: Math.min(160, Math.max(72, layout.height * 0.18)) }} />
+      </View>
+      <View style={[styles.background, { paddingLeft: layout.left, paddingRight: layout.right, paddingTop: layout.gap, paddingBottom: layout.bottom }]}>
         <View style={styles.boardContent}>
-          <Text style={styles.rankingLabel}>RANKING</Text>
-          <Image
-            source={require("../../assets/images/leaderboard-line.png")}
-            style={styles.headerLine}
-            resizeMode="stretch"
-          />
 
           {visibleEntries.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No hands submitted yet</Text>
+              <Text style={styles.emptyTitle}>{errorMessage ? "Unable to load the leaderboard" : "No players have joined yet"}</Text>
               <Text style={styles.emptyText}>
-                Complete a hand and submit it to create the first leaderboard entry.
+                {errorMessage ? "Check your connection and try Refresh." : "Players appear here as soon as they join this event."}
               </Text>
             </View>
           ) : (
@@ -243,19 +162,19 @@ export default function LeaderboardScreen() {
                 return (
                   <View key={entry.runId} style={styles.entry}>
                     <View style={styles.entryHeader}>
-                      <Text style={styles.rankText}>{entry.leaderboardRank}.</Text>
-                      <Text numberOfLines={1} style={styles.playerName}>
+                      <Text style={[styles.rankText, { fontSize: layout.playerNameSize, lineHeight: layout.playerNameSize * 1.4 }]}>{entry.leaderboardRank}.</Text>
+                      <Text numberOfLines={1} style={[styles.playerName, { fontSize: playerNameSize, lineHeight: playerNameSize * 1.4 }]}>
                         {entry.playerLabel}
                         {isCurrentUser ? " (You)" : ""}
                       </Text>
                     </View>
 
-                    <View style={styles.cardsRow}>
+                    <View style={[styles.cardsRow, { gap: cards.gap }]}>
                       {Array.from({ length: 5 }).map((_, index) => {
                         const card = entry.bestHandCards[index];
 
                         return (
-                          <View key={`${entry.runId}-${index}`} style={styles.cardSlot}>
+                          <View key={`${entry.runId}-${index}`} style={[styles.cardSlot, { width: cards.width, height: cards.height }]}>
                             {card ? (
                               <PlayingCard
                                 card={card}
@@ -271,38 +190,27 @@ export default function LeaderboardScreen() {
                     </View>
 
                     <View style={styles.metaRow}>
-                      <Text numberOfLines={1} style={styles.handNameText}>
-                        {entry.bestHandName}
+                      <Text numberOfLines={1} style={[styles.handNameText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
+                        {entry.visitCount === 0 ? "No cards collected" : entry.bestHandName}
                       </Text>
-                      <Text style={styles.metaText}>{timeLabel}</Text>
+                      <Text numberOfLines={1} style={[styles.metaText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
+                        {timeLabel}
+                      </Text>
                     </View>
 
-                    <Image
-                      source={require("../../assets/images/leaderboard-line.png")}
-                      style={styles.entryLine}
-                      resizeMode="stretch"
-                    />
+                    <View style={styles.entryLine} />
                   </View>
                 );
               })}
             </ScrollView>
           )}
 
-          <View style={styles.footer}>
+          <ScrollView style={{ flexGrow: 0, maxHeight: layout.footerMaxHeight }} contentContainerStyle={styles.footer}>
+            <HandSyncStatus color={TRAIL_INK} fontSize={layout.detailSize} hideWhenSaved />
             {errorMessage ? <Text style={styles.errorTextSmall}>{errorMessage}</Text> : null}
-            <Pressable
-              onPress={() => {
-                void refreshLeaderboard(false);
-              }}
-              style={styles.refreshButton}
-            >
-              <Text style={styles.refreshButtonText}>
-                {refreshing ? "REFRESHING..." : "REFRESH"}
-              </Text>
-            </Pressable>
-          </View>
+          </ScrollView>
         </View>
-      </ImageBackground>
+      </View>
     </View>
   );
 }
@@ -333,227 +241,49 @@ function formatDateTime(value: string) {
   }).format(date);
 }
 
-const testLeaderboardCurrentUserId = "test-user-04";
-
-const testLeaderboardEntries: LeaderboardEntry[] = [
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-01",
-  //   userId: "test-user-01",
-  //   playerLabel: "River Queen",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:02:00+10:00",
-  //   finishedAt: "2026-05-18T09:14:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Straight Flush",
-  //   bestHandRank: 8,
-  //   bestHandCards: ["9H", "10H", "JH", "QH", "KH"],
-  //   tiebreaker: [13],
-  //   leaderboardRank: 1,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-02",
-  //   userId: "test-user-02",
-  //   playerLabel: "The Long Way Home",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:07:00+10:00",
-  //   finishedAt: "2026-05-18T09:19:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Four of a Kind",
-  //   bestHandRank: 7,
-  //   bestHandCards: ["AS", "AH", "AD", "AC", "7D"],
-  //   tiebreaker: [14, 7],
-  //   leaderboardRank: 2,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-03",
-  //   userId: "test-user-03",
-  //   playerLabel: "Saltwater Social Club",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:11:00+10:00",
-  //   finishedAt: "2026-05-18T09:27:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Full House",
-  //   bestHandRank: 6,
-  //   bestHandCards: ["KS", "KH", "KC", "9S", "9C"],
-  //   tiebreaker: [13, 9],
-  //   leaderboardRank: 3,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-04",
-  //   userId: "test-user-04",
-  //   playerLabel: "Current Crew With A Very Long Name",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:15:00+10:00",
-  //   finishedAt: "2026-05-18T09:32:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Flush",
-  //   bestHandRank: 5,
-  //   bestHandCards: ["2D", "6D", "8D", "JD", "QD"],
-  //   tiebreaker: [12, 11, 8, 6, 2],
-  //   leaderboardRank: 4,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-05",
-  //   userId: "test-user-05",
-  //   playerLabel: "Waypoint Wanderers",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:19:00+10:00",
-  //   finishedAt: "2026-05-18T09:41:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Straight",
-  //   bestHandRank: 4,
-  //   bestHandCards: ["5S", "6C", "7H", "8S", "9D"],
-  //   tiebreaker: [9],
-  //   leaderboardRank: 5,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-06",
-  //   userId: "test-user-06",
-  //   playerLabel: "Portside Pair",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:23:00+10:00",
-  //   finishedAt: "2026-05-18T09:48:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Three of a Kind",
-  //   bestHandRank: 3,
-  //   bestHandCards: ["QS", "QH", "QC", "4C", "2S"],
-  //   tiebreaker: [12, 4, 2],
-  //   leaderboardRank: 6,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-07",
-  //   userId: "test-user-07",
-  //   playerLabel: "Marina Mates",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:28:00+10:00",
-  //   finishedAt: "2026-05-18T09:52:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "Two Pair",
-  //   bestHandRank: 2,
-  //   bestHandCards: ["JS", "JH", "8C", "8H", "3D"],
-  //   tiebreaker: [11, 8, 3],
-  //   leaderboardRank: 7,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-08",
-  //   userId: "test-user-08",
-  //   playerLabel: "Buoy Bandits",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:31:00+10:00",
-  //   finishedAt: "2026-05-18T09:58:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "One Pair",
-  //   bestHandRank: 1,
-  //   bestHandCards: ["10S", "10C", "AH", "7C", "5D"],
-  //   tiebreaker: [10, 14, 7, 5],
-  //   leaderboardRank: 8,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-09",
-  //   userId: "test-user-09",
-  //   playerLabel: "Anchor Management",
-  //   runStatus: "completed",
-  //   startedAt: "2026-05-18T08:37:00+10:00",
-  //   finishedAt: "2026-05-18T10:04:00+10:00",
-  //   visitCount: 5,
-  //   bestHandName: "High Card",
-  //   bestHandRank: 0,
-  //   bestHandCards: ["AS", "JD", "9C", "6H", "2C"],
-  //   tiebreaker: [14, 11, 9, 6, 2],
-  //   leaderboardRank: 9,
-  // },
-  // {
-  //   eventId: "test-event",
-  //   eventSlug: "preview",
-  //   eventName: "Preview Event",
-  //   runId: "test-run-10",
-  //   userId: "test-user-10",
-  //   playerLabel: "Late Starter",
-  //   runStatus: "active",
-  //   startedAt: "2026-05-18T10:10:00+10:00",
-  //   finishedAt: null,
-  //   visitCount: 3,
-  //   bestHandName: "No Scored Hand Yet",
-  //   bestHandRank: 0,
-  //   bestHandCards: [],
-  //   tiebreaker: [],
-  //   leaderboardRank: 10,
-  // },
-];
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#1d223e",
+    backgroundColor: TRAIL_WHITE,
   },
   centered: {
     flex: 1,
-    backgroundColor: "#1d223e",
+    backgroundColor: TRAIL_WHITE,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 24,
   },
   leaveButton: {
     position: "absolute",
-    right: 18,
-    top: 48,
+    right: 16,
+    top: 56,
     zIndex: 5,
   },
+  floatingRefresh: {
+    position: "absolute", zIndex: 5,
+    backgroundColor: TRAIL_WHITE,
+    alignItems: "center", justifyContent: "center",
+    elevation: 4, shadowColor: "#000000",
+    shadowOffset: { height: 2, width: 0 }, shadowOpacity: 0.2, shadowRadius: 4,
+  },
+  refreshDimmed: { opacity: 0.5 },
   background: {
     flex: 1,
+    backgroundColor: TRAIL_WHITE,
     paddingHorizontal: 28,
   },
-  boardContent: {
-    bottom: 34,
-    left: 34,
-    position: "absolute",
-    right: 34,
-    top: "20%",
-  },
+  boardContent: { flex: 1, width: "100%", maxWidth: 720, alignSelf: "center", minHeight: 0 },
   list: {
     flex: 1,
+    minHeight: 0,
   },
   listContent: {
     paddingBottom: 8,
   },
-  rankingLabel: {
-    color: "#1d223e",
-    fontFamily: "Stoke-Regular",
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0,
-    lineHeight: 17,
-    marginBottom: 2,
-  },
+  trophyHeader: { backgroundColor: APP_BACKGROUND_COLOR, width: "100%", alignItems: "center", gap: 8 },
   headerLine: {
-    height: 8,
+    backgroundColor: "#ffffff",
+    height: 2,
     marginBottom: 8,
     width: "100%",
   },
@@ -566,29 +296,27 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   rankText: {
-    color: "#1d223e",
-    fontFamily: "Stoke-Regular",
+    color: TRAIL_INK,
+    fontFamily: TRAIL_DISPLAY_FONT,
     fontSize: 26,
-    fontWeight: "700",
+    fontWeight: "900",
     lineHeight: 38,
     marginRight: 8,
     minWidth: 24,
     textAlign: "center",
   },
   playerName: {
-    color: "#1d223e",
+    color: TRAIL_INK,
     flex: 1,
-    fontFamily: "Stoke-Regular",
+    fontFamily: "RobotoSlab_800ExtraBold",
     fontSize: 26,
-    fontWeight: "700",
     lineHeight: 34,
   },
   cardsRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     marginBottom: 5,
     marginTop: 3,
-    paddingHorizontal: 32,
     width: "100%",
   },
   cardSlot: {
@@ -596,47 +324,43 @@ const styles = StyleSheet.create({
     height: 64,
   },
   leaderboardCard: {
-    borderColor: "#1d223e",
-    borderRadius: 4,
-    borderWidth: 1,
+    borderRadius: 8,
     height: "100%",
     width: "100%",
   },
   cardBack: {
-    backgroundColor: "#625d52",
-    borderColor: "#262412",
-    borderRadius: 5,
-    borderWidth: 2,
+    backgroundColor: TRAIL_INK,
+    borderColor: TRAIL_INK,
+    borderRadius: 8,
+    borderWidth: 3,
     height: "100%",
     width: "100%",
   },
   metaRow: {
-    alignItems: "center",
     flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
     justifyContent: "space-between",
-    paddingLeft: 32,
-    paddingRight: 32,
     paddingVertical: 3,
   },
   handNameText: {
-    color: "#1d223e",
     flex: 1,
-    fontFamily: "Stoke-Regular",
+    color: TRAIL_INK,
+    fontFamily: "Montserrat_500Medium_Italic",
     fontSize: 11,
-    fontWeight: "700",
     lineHeight: 15,
   },
   metaText: {
-    color: "#1d223e",
-    fontFamily: "Stoke-Regular",
+    flexShrink: 0,
+    color: TRAIL_INK,
+    fontFamily: "Montserrat_500Medium_Italic",
     fontSize: 11,
-    fontWeight: "700",
     lineHeight: 15,
-    marginLeft: 10,
   },
   entryLine: {
-    height: 8,
-    marginTop: 6,
+    backgroundColor: TRAIL_INK,
+    height: 2,
+    marginTop: 14,
     width: "100%",
   },
   emptyState: {
@@ -646,27 +370,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: "#1d223e",
-    fontFamily: "Stoke-Regular",
+    color: TRAIL_INK,
+    fontFamily: TRAIL_BODY_FONT,
     fontSize: 20,
     fontWeight: "700",
     textAlign: "center",
   },
   emptyText: {
-    color: "#1d223e",
-    fontFamily: "Stoke-Regular",
+    color: TRAIL_INK,
+    fontFamily: TRAIL_BODY_FONT,
     fontSize: 14,
     textAlign: "center",
     marginTop: 8,
   },
   errorText: {
-    color: "#ff8a80",
+    color: TRAIL_INK,
     fontSize: 16,
     textAlign: "center",
   },
   errorTextSmall: {
-    color: "#8f1d1d",
-    fontFamily: "Stoke-Regular",
+    color: TRAIL_INK,
+    fontFamily: TRAIL_BODY_FONT,
     fontSize: 13,
     marginBottom: 8,
     textAlign: "center",
@@ -676,23 +400,25 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   refreshButton: {
-    backgroundColor: "#1d223e",
-    borderColor: "#d9d2bb",
-    borderRadius: 5,
-    borderWidth: 1,
+    backgroundColor: TRAIL_WHITE,
+    borderColor: TRAIL_INK,
+    borderRadius: 12,
+    borderWidth: 3,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingVertical: 10,
   },
   lockedButton: {
-    backgroundColor: "#1d223e",
+    backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 8,
     marginTop: 16,
   },
   refreshButtonText: {
-    color: "#f2ead4",
-    fontFamily: "Stoke-Regular",
-    fontWeight: "700",
+    color: TRAIL_INK,
+    fontFamily: TRAIL_DISPLAY_FONT,
+    fontWeight: "900",
   },
 });

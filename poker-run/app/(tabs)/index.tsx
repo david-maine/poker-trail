@@ -1,97 +1,75 @@
-import { router } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ImageBackground, Pressable, StyleSheet, Text, View } from "react-native";
+import { APP_BACKGROUND_COLOR, TRAIL_WHITE } from "../../src/lib/theme";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import MapDisplay from "../../components/MapDisplay";
 import CardRow from "../../src/components/CardRow";
 import LeaveEventButton from "../../src/components/LeaveEventButton";
 import LoadingScreen from "../../src/components/LoadingScreen";
+import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import useLocation from "../../src/hooks/useLocation";
-import { addConnectivityListener, fetchIsUsableConnection } from "../../src/lib/connectivity";
 import { useEventSession } from "../../src/lib/eventSession";
-import {
-  GameEvent,
-  isAlreadySubmittedError,
-  isRetryableHandSubmissionError,
-  loadGameBootstrapForEvent,
-  submitCompletedHand,
-} from "../../src/lib/game";
-import {
-  addLocalCardClaim,
-  getLocalHand,
-  LocalHand,
-  markHandPendingSubmission,
-  markHandSubmissionFailed,
-  markHandSubmitted,
-} from "../../src/lib/localHand";
+import { GameEvent, loadGameBootstrapForEvent } from "../../src/lib/game";
+import { addLocalCardClaim } from "../../src/lib/localHand";
+import HandSyncStatus from "../../src/components/HandSyncStatus";
+import { addConnectivityListener } from "../../src/lib/connectivity";
 import { getDistanceMeters } from "../../src/lib/utils";
 import { Waypoint } from "../../src/types";
 
-type SubmitOptions = {
-  force?: boolean;
-  silent?: boolean;
-};
-
 export default function Index() {
-  const { location, heading, errorMsg } = useLocation();
-  const { registrationState } = useEventSession();
+  const layout = useResponsiveLayout(false);
+  const { location, heading, errorMsg, retryLocation } = useLocation();
+  const { registrationState, hand } = useEventSession();
 
   const [event, setEvent] = useState<GameEvent | null>(null);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
-  const [hand, setHand] = useState<LocalHand | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
   const [isLoadingGame, setIsLoadingGame] = useState(true);
-  const [isSubmittingHand, setIsSubmittingHand] = useState(false);
 
   const inFlightClaimIdsRef = useRef(new Set<string>());
   const claimCooldownUntilRef = useRef(new Map<string, number>());
-  const handRef = useRef<LocalHand | null>(null);
-  const eventRef = useRef<GameEvent | null>(null);
-  const waypointsRef = useRef<Waypoint[]>([]);
-  const isSubmittingHandRef = useRef(false);
-  const submitCooldownUntilRef = useRef(0);
+  const bootstrapRequest = useRef(0);
+  const loadGame = useCallback(async (showSpinner: boolean) => {
+    const request = ++bootstrapRequest.current;
+    if (showSpinner) {
+      setIsLoadingGame(true);
+    }
 
-  useEffect(() => {
-    void loadGame(true);
-    // App-session event changes only when the root session state is updated locally.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setScreenError(null);
+
+    try {
+      const sessionEvent = registrationState.event;
+
+      if (!sessionEvent) {
+        setEvent(null);
+        setWaypoints([]);
+        return;
+      }
+
+      const bootstrap = await loadGameBootstrapForEvent(sessionEvent);
+
+      if (request !== bootstrapRequest.current) return;
+      setEvent(bootstrap.event);
+      setWaypoints(bootstrap.waypoints);
+    } catch (error) {
+      if (request === bootstrapRequest.current && showSpinner) setScreenError(getErrorMessage(error, "Unable to load the event."));
+    } finally {
+      if (request === bootstrapRequest.current) setIsLoadingGame(false);
+    }
   }, [registrationState.event]);
 
-  useEffect(() => {
-    handRef.current = hand;
-  }, [hand]);
-
-  useEffect(() => {
-    eventRef.current = event;
-  }, [event]);
-
-  useEffect(() => {
-    waypointsRef.current = waypoints;
-  }, [waypoints]);
-
-  useEffect(() => {
-    const unsubscribe = addConnectivityListener((isUsable) => {
-      if (isUsable) {
-        void retryPendingSubmission({ silent: true });
-      }
-    });
-
-    void fetchIsUsableConnection().then((isUsable) => {
-      if (isUsable) {
-        void retryPendingSubmission({ silent: true });
-      }
-    });
-
-    return unsubscribe;
-    // `retryPendingSubmission` reads current refs and intentionally stays stable for this listener.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    void retryPendingSubmission({ silent: true });
-    // `retryPendingSubmission` reads current refs and is gated by submission cooldowns.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event, hand]);
+  useEffect(() => { void loadGame(true); }, [loadGame]);
+  useFocusEffect(useCallback(() => {
+    const refresh = () => { void loadGame(false); };
+    const interval = setInterval(refresh, 10000);
+    const disconnect = addConnectivityListener(online => { if (online) refresh(); });
+    const appState = AppState.addEventListener("change", state => { if (state === "active") refresh(); });
+    refresh();
+    return () => { clearInterval(interval); disconnect(); appState.remove(); };
+  }, [loadGame]));
+  const rejectedClaims = hand?.rejectedWaypointIds?.join(",") ?? "";
+  useEffect(() => { if (rejectedClaims) void loadGame(false); }, [rejectedClaims, loadGame]);
 
   const visitOrder = useMemo(
     () => hand?.claims.map((claim) => claim.waypointId) ?? [],
@@ -124,18 +102,11 @@ export default function Index() {
     return nextCards;
   }, [hand, waypoints]);
 
-  const isHandComplete = waypoints.length > 0 && visitOrder.length >= waypoints.length;
-  const isPendingSubmission = hand?.status === "pending_submission";
   const isSubmitted = hand?.status === "submitted";
 
   useEffect(() => {
-    if (isSubmitted) {
-      router.navigate("/(tabs)/leaderboard");
-    }
-  }, [isSubmitted]);
-
-  useEffect(() => {
-    if (!location || !event || !hand || waypoints.length === 0 || isSubmitted) {
+    if (errorMsg || !location || !event || !hand || event.id !== hand.eventId || waypoints.length === 0 || isSubmitted ||
+        (location.coords.accuracy !== null && (location.coords.accuracy < 0 || location.coords.accuracy > 65))) {
       return;
     }
 
@@ -144,7 +115,7 @@ export default function Index() {
     }
 
     const nextWaypoint = waypoints.find((waypoint) => {
-      if (visited[waypoint.id]) {
+      if (visited[waypoint.id] && !hand.rejectedWaypointIds?.includes(waypoint.id)) {
         return false;
       }
 
@@ -174,37 +145,7 @@ export default function Index() {
     void handleWaypointCollection(nextWaypoint);
     // `handleWaypointCollection` uses current refs/state and is guarded by in-flight waypoint ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event, hand, isSubmitted, location, visited, waypoints]);
-
-  async function loadGame(showSpinner: boolean) {
-    if (showSpinner) {
-      setIsLoadingGame(true);
-    }
-
-    setScreenError(null);
-
-    try {
-      const sessionEvent = registrationState.event;
-
-      if (!sessionEvent) {
-        setEvent(null);
-        setWaypoints([]);
-        setHand(null);
-        return;
-      }
-
-      const bootstrap = await loadGameBootstrapForEvent(sessionEvent);
-
-      const localHand = await getLocalHand(bootstrap.event.id);
-      setEvent(bootstrap.event);
-      setWaypoints(bootstrap.waypoints);
-      setHand(localHand);
-    } catch (error) {
-      setScreenError(getErrorMessage(error, "Unable to load the event."));
-    } finally {
-      setIsLoadingGame(false);
-    }
-  }
+  }, [event, hand, isSubmitted, location, visited, waypoints, errorMsg]);
 
   async function handleWaypointCollection(waypoint: Waypoint) {
     if (!event || !location || inFlightClaimIdsRef.current.has(waypoint.id)) {
@@ -215,7 +156,7 @@ export default function Index() {
     setScreenError(null);
 
     try {
-      const result = await addLocalCardClaim({
+      await addLocalCardClaim({
         eventId: event.id,
         waypointId: waypoint.id,
         claimedLat: location.coords.latitude,
@@ -223,7 +164,6 @@ export default function Index() {
         gpsAccuracyMeters: location.coords.accuracy ?? null,
       });
 
-      setHand(result.hand);
       claimCooldownUntilRef.current.delete(waypoint.id);
     } catch (error) {
       const message = getErrorMessage(error, `Unable to collect ${waypoint.name}.`);
@@ -234,126 +174,18 @@ export default function Index() {
     }
   }
 
-  async function retryPendingSubmission(options: SubmitOptions = {}) {
-    const currentHand = handRef.current;
-    if (
-      !currentHand ||
-      currentHand.status !== "pending_submission" ||
-      (!currentHand.lastSubmissionRetryable && currentHand.lastSubmissionError && !options.force) ||
-      (!options.force && submitCooldownUntilRef.current > Date.now())
-    ) {
-      return;
-    }
-
-    await submitHand(options);
-  }
-
-  async function submitHand(options: SubmitOptions = {}) {
-    const currentEvent = eventRef.current;
-    const currentHand = handRef.current;
-    const currentWaypoints = waypointsRef.current;
-
-    if (!currentEvent || !currentHand || isSubmittingHandRef.current) {
-      return;
-    }
-
-    if (currentHand.status === "submitted") {
-      return;
-    }
-
-    if (currentWaypoints.length === 0 || currentHand.claims.length < currentWaypoints.length) {
-      return;
-    }
-
-    setScreenError(null);
-    let queuedHand = currentHand;
-
-    if (queuedHand.status !== "pending_submission") {
-      queuedHand = await markHandPendingSubmission(queuedHand);
-      setHand(queuedHand);
-      handRef.current = queuedHand;
-    }
-
-    const isUsableConnection = await fetchIsUsableConnection();
-    if (!isUsableConnection) {
-      submitCooldownUntilRef.current = Date.now() + 5000;
-      return;
-    }
-
-    isSubmittingHandRef.current = true;
-    setIsSubmittingHand(true);
-
-    try {
-      await submitCompletedHand(currentEvent.id, queuedHand.claims);
-      const submittedHand = await markHandSubmitted(queuedHand);
-      setHand(submittedHand);
-      handRef.current = submittedHand;
-      if (!options.silent) {
-        router.navigate("/(tabs)/leaderboard");
-      }
-    } catch (error) {
-      if (isAlreadySubmittedError(error)) {
-        const submittedHand = await markHandSubmitted(queuedHand);
-        setHand(submittedHand);
-        handRef.current = submittedHand;
-        if (!options.silent) {
-          router.navigate("/(tabs)/leaderboard");
-        }
-        return;
-      }
-
-      const message = getErrorMessage(error, "Unable to submit your hand.");
-      const retryable = isRetryableHandSubmissionError(error);
-      const failedHand = await markHandSubmissionFailed(queuedHand, message, retryable);
-      submitCooldownUntilRef.current = retryable ? Date.now() + 5000 : 0;
-      setHand(failedHand);
-      handRef.current = failedHand;
-
-      if (!retryable) {
-        setScreenError(message);
-      }
-    } finally {
-      isSubmittingHandRef.current = false;
-      setIsSubmittingHand(false);
-    }
-  }
-
-  function getSubmitButtonLabel() {
-    if (isSubmittingHand) {
-      return "PLAYING...";
-    }
-
-    if (isSubmitted) {
-      return "PLAYED";
-    }
-
-    if (isPendingSubmission) {
-      return "RETRY";
-    }
-
-    return "PLAY";
-  }
-
-  if (errorMsg) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>{errorMsg}</Text>
-      </View>
-    );
-  }
-
-  if (isLoadingGame || !location) {
+  if (isLoadingGame || !hand) {
     return (
       <LoadingScreen
-        accessibilityLabel={isLoadingGame ? "Loading event" : "Getting location"}
+        accessibilityLabel={isLoadingGame ? "Loading event" : "Loading your hand"}
       />
     );
   }
 
   if (!event || waypoints.length === 0 || !hand) {
     return (
-      <View style={styles.container}>
-        <LeaveEventButton style={styles.leaveButton} />
+      <View onLayout={layout.onLayout} style={styles.container}>
+        <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
         <Text style={styles.errorText}>
           {screenError ?? "No active event is configured in Supabase yet."}
         </Text>
@@ -370,60 +202,45 @@ export default function Index() {
   }
 
   return (
-    <View style={styles.container}>
-      <LeaveEventButton style={styles.leaveButton} />
+    <View onLayout={layout.onLayout} style={styles.container}>
+      <LeaveEventButton style={[styles.leaveButton, { top: layout.controlTop, right: layout.right, width: layout.controlSize, height: layout.controlSize, borderRadius: layout.controlSize / 2 }]} />
+      {screenError ? <Text accessibilityRole="alert" style={styles.errorText}>{screenError}</Text> : null}
       <View style={styles.map}>
         <MapDisplay
+          controls={layout.control}
           waypoints={waypoints}
           visited={visited}
-          userLocation={{
+          userLocation={location ? {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
             heading: heading ?? location.coords.heading,
-          }}
+          } : null}
         />
+        {!location || errorMsg ? (
+          <ScrollView style={[styles.locationBanner, { top: layout.controlTop + layout.controlSize + 12, left: layout.left, right: layout.right }]} contentContainerStyle={styles.locationBannerContent}>
+            <Text accessibilityLiveRegion="polite" style={styles.locationText}>
+              {errorMsg ?? "Getting your location… Allow location access when prompted."}
+            </Text>
+            <Pressable accessibilityRole="button" onPress={retryLocation} style={styles.locationRetry}>
+              <Text style={styles.locationText}>Retry location</Text>
+            </Pressable>
+          </ScrollView>
+        ) : null}
+      </View>
+        <ScrollView style={[styles.bottomPanel, { maxHeight: layout.handPanelHeight }]} contentContainerStyle={[styles.handContent, { paddingLeft: layout.left, paddingRight: layout.right, paddingVertical: layout.gap * 1.5, gap: layout.gap / 2 }]} >
 
-        <ImageBackground
-          source={require("../../assets/images/map-background.png")}
-          style={styles.bottomPanel}
-          resizeMode="cover"
-        >
-          <Text style={styles.handTitle}>YOUR HAND</Text>
-
-          <View style={styles.cardsArea}>
+          <View style={[styles.cardsArea, { padding: layout.gap * 1.5 }]}>
             <CardRow
               visitOrder={visitOrder}
               waypointCards={waypointCards}
               total={waypoints.length}
+              maxCardHeight={layout.cardHeight}
+              gap={layout.cardGap}
             />
           </View>
 
-          <Pressable
-            disabled={!isHandComplete || isSubmitted || isSubmittingHand}
-            onPress={() => {
-              void submitHand({ force: true });
-            }}
-            style={[
-              styles.submitButton,
-              !isHandComplete || isSubmitted || isSubmittingHand ? styles.buttonDisabled : null,
-            ]}
-          >
-            <ImageBackground
-              source={require("../../assets/images/map-PLAY.png")}
-              style={styles.submitButtonImage}
-              resizeMode="contain"
-            >
-              <Text style={styles.submitButtonText}>{getSubmitButtonLabel()}</Text>
-            </ImageBackground>
-          </Pressable>
-        </ImageBackground>
-      </View>
-
-
-
-      {/* <View style={styles.controlsArea}> */}
-
-      {/* </View> */}
+          <HandSyncStatus color="#ffffff" fontSize={layout.detailSize} hideWhenSaved />
+        </ScrollView>
     </View>
   );
 }
@@ -446,7 +263,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#25292e",
+    backgroundColor: APP_BACKGROUND_COLOR,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -454,82 +271,46 @@ const styles = StyleSheet.create({
     width: "100%",
     flex: 1,
     position: "relative",
+    minHeight: 0,
   },
   leaveButton: {
     position: "absolute",
-    right: 18,
-    top: 48,
+    right: 16,
+    top: 56,
     zIndex: 5,
   },
-  controlsArea: {
-    width: "100%",
-    backgroundColor: "#25292e",
-    justifyContent: "center",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#3f444c",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
   bottomPanel: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 48,
-    aspectRatio: 4679 / 2788,
-    paddingBottom: 14,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2,
-    elevation: 2,
+    backgroundColor: APP_BACKGROUND_COLOR, width: "100%", flexGrow: 0, flexShrink: 0,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
   },
-  handTitle: {
-    color: "#202540",
-    fontFamily: "Stoke-Regular",
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 28,
-    marginBottom: 12,
-    textAlign: "center",
+  handContent: {
+    width: "100%", maxWidth: 720, alignSelf: "center",
+    alignItems: "center", justifyContent: "center",
   },
   cardsArea: {
     width: "100%",
+    borderWidth: 3, borderColor: TRAIL_WHITE, borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 16,
     paddingHorizontal: 0,
   },
+  locationBanner: {
+    position: "absolute", maxHeight: "65%", backgroundColor: APP_BACKGROUND_COLOR,
+    borderColor: "#ffffff", borderWidth: 1, borderRadius: 6, zIndex: 2,
+  },
+  locationBannerContent: { padding: 12, gap: 8, alignItems: "center" },
+  locationText: { color: "#ffffff", fontSize: 14, textAlign: "center" },
+  locationRetry: { minHeight: 44, justifyContent: "center", borderWidth: 1, borderColor: "#ffffff", paddingHorizontal: 16, paddingVertical: 8 },
   refreshButton: {
     alignSelf: "flex-start",
-    backgroundColor: "#1b5e20",
+    backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  submitButton: {
-    width: "62%",
-  },
-  submitButtonImage: {
-    alignItems: "center",
-    aspectRatio: 2422 / 533,
-    justifyContent: "center",
-    width: "100%",
-  },
-  buttonDisabled: {
-    opacity: 0.55,
-  },
   refreshButtonText: {
     color: "#ffffff",
     fontWeight: "700",
-  },
-  submitButtonText: {
-    color: "#f2ead4",
-    fontFamily: "Stoke-Regular",
-    fontSize: 24,
-    fontWeight: "700",
-    lineHeight: 30,
   },
   errorText: {
     color: "#ff8a80",

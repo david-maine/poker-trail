@@ -1,3 +1,4 @@
+import { APP_BACKGROUND_COLOR } from "../src/lib/theme";
 import { Stack, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -56,11 +57,9 @@ export default function RootLayout() {
         if (isMounted) {
           setRegistrationState(nextRegistrationState);
           setInitialRouteName(
-            !nextRegistrationState.event
-              ? "event-code"
-              : nextRegistrationState.requiresRegistration
-                ? "register"
-                : "(tabs)"
+            !nextRegistrationState.event || nextRegistrationState.requiresRegistration
+              ? "register"
+              : "(tabs)"
           );
           setReady(true);
         }
@@ -120,7 +119,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#25292e",
+    backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 24,
   },
   errorText: {

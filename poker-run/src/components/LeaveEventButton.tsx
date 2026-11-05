@@ -2,11 +2,12 @@ import { Href, router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   StyleProp,
   StyleSheet,
-  Text,
   ViewStyle,
 } from "react-native";
 
@@ -72,34 +73,37 @@ export default function LeaveEventButton({ style }: LeaveEventButtonProps) {
     <Pressable
       accessibilityLabel="Leave event"
       accessibilityRole="button"
+      accessibilityState={{ busy: leaving, disabled: leaving }}
       disabled={leaving}
       onPress={confirmLeave}
-      style={[styles.button, leaving ? styles.buttonDisabled : null, style]}
+      style={({ pressed }) => [styles.button, pressed ? styles.buttonPressed : null, leaving ? styles.buttonDisabled : null, style]}
     >
-      <Text style={styles.buttonText}>{leaving ? "Leaving..." : "Leave Event"}</Text>
+      {leaving ? <ActivityIndicator color="#1f2937" size="small" /> : (
+        <Image accessible={false} source={require("../../assets/images/POKER-TRAIL-icon-exit.png")} resizeMode="contain" style={styles.icon} />
+      )}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  icon: { width: "100%", height: "100%" },
   button: {
     alignItems: "center",
-    backgroundColor: "rgba(29, 34, 62, 0.82)",
-    borderColor: "#d9d2bb",
-    borderRadius: 5,
-    borderWidth: 1,
-    minHeight: 36,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    elevation: 4,
+    height: 48,
     justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    width: 48,
+    shadowColor: "#000000",
+    shadowOffset: { height: 2, width: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   buttonDisabled: {
-    opacity: 0.62,
+    opacity: 0.45,
   },
-  buttonText: {
-    color: "#f2ead4",
-    fontFamily: "Stoke-Regular",
-    fontSize: 13,
-    fontWeight: "700",
+  buttonPressed: {
+    opacity: 0.78,
   },
 });

@@ -129,7 +129,11 @@ Deno.serve(async (request) => {
     });
 
     const eventId = payload.eventId!;
-    const claims = payload.claims!;
+    const claims = payload.claims!.map(claim => ({
+      waypointId: claim.waypointId, card: claim.card, claimedAt: claim.claimedAt,
+      claimedLat: claim.claimedLat, claimedLng: claim.claimedLng,
+      gpsAccuracyMeters: claim.gpsAccuracyMeters ?? null,
+    }));
     const event = await fetchEvent(admin, eventId);
 
     if (!event) {
@@ -142,55 +146,42 @@ Deno.serve(async (request) => {
     }
 
     const waypoints = await fetchActiveWaypoints(admin, eventId);
-    const handError = validateCompletedHand(claims, waypoints);
-    if (handError) {
-      return jsonResponse({ error: handError }, 422);
-    }
-
     const run = await fetchRun(admin, eventId, userId);
     if (!run || !normalizeNullableString(run.display_name)) {
       return jsonResponse({ error: "Register a vessel name before submitting a hand." }, 409);
     }
-
-    if (run.status === "completed") {
-      return jsonResponse({
-        run: mapRunResponse(run),
-        alreadySubmitted: true,
-      });
+    const { data: stored, error: storedError } = await admin.from("run_card_claims")
+      .select("claim").eq("run_id", run.id);
+    if (storedError) throw storedError;
+    const accepted = (stored ?? []).map((row: { claim: SubmittedClaim }) => row.claim);
+    if (claims.some(claim => accepted.some(previous => previous.waypointId === claim.waypointId && !sameRecordedClaim(previous, claim)))) {
+      return jsonResponse({ error: "Accepted cards cannot be changed." }, 409);
     }
-
-    if (run.status !== "active") {
-      return jsonResponse({ error: "This run is no longer active." }, 409);
+    const handError = validateHand(claims, waypoints, accepted);
+    if (handError) {
+      return jsonResponse({ error: handError, rejectedWaypointIds: claims.filter(claim => {
+        const waypoint = waypoints.find(point => point.id === claim.waypointId);
+        return waypoint && !accepted.some(previous => sameRecordedClaim(previous, claim)) &&
+          (claim.gpsAccuracyMeters! > MAX_GPS_ACCURACY_METERS ||
+            haversineMeters(claim.claimedLat!, claim.claimedLng!, waypoint.latitude, waypoint.longitude) > waypoint.radius_meters);
+      }).map(claim => claim.waypointId) }, 422);
     }
 
     const bestHand = evaluateBestHand(claims.map((claim) => claim.card!));
-    const lastClaimAt = claims
-      .map((claim) => claim.claimedAt!)
-      .sort((left, right) => left.localeCompare(right))
-      .at(-1)!;
-    const finishedAt = timezoneNow();
-
-    const { data: updatedRunData, error: updateRunError } = await admin
-      .from("runs")
-      .update({
-        last_claim_at: lastClaimAt,
-        visit_count: claims.length,
-        status: "completed",
-        finished_at: finishedAt,
-        best_hand_name: bestHand.name,
-        best_hand_rank: bestHand.rank,
-        best_hand_cards: bestHand.cards,
-        tiebreaker: bestHand.tiebreaker,
-      })
-      .eq("id", run.id)
-      .select("*")
-      .single();
-
-    if (updateRunError || !updatedRunData) {
-      throw updateRunError ?? new Error("Run update failed.");
+    const { data: updatedRunData, error: updateRunError } = await admin.rpc("apply_hand_snapshot", {
+      p_run_id: run.id,
+      p_claims: claims,
+      p_score: bestHand,
+    });
+    if (updateRunError) {
+      if (updateRunError.code === "P0001" || updateRunError.code === "23505") {
+        return jsonResponse({ error: updateRunError.message }, 409);
+      }
+      throw updateRunError;
     }
+    if (!updatedRunData) throw new Error("Run update failed.");
 
-    const updatedRun = updatedRunData as RunRow;
+    const updatedRun = updatedRunData.run as RunRow;
     const { data: leaderboardEntry, error: leaderboardError } = await admin
       .from("leaderboard_entries")
       .select("*")
@@ -210,6 +201,7 @@ Deno.serve(async (request) => {
     });
 
     return jsonResponse({
+      claims: updatedRunData.claims,
       event: {
         id: event.id,
         slug: event.slug,
@@ -233,12 +225,12 @@ function validatePayload(payload: SubmitHandPayload) {
     return "Request body must be a JSON object.";
   }
 
-  if (!payload.eventId) {
-    return "eventId is required.";
+  if (typeof payload.eventId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.eventId)) {
+    return "A valid eventId is required.";
   }
 
   if (!Array.isArray(payload.claims) || payload.claims.length === 0) {
-    return "claims must contain a completed hand.";
+    return "claims must contain at least one collected card.";
   }
 
   for (const claim of payload.claims) {
@@ -246,26 +238,26 @@ function validatePayload(payload: SubmitHandPayload) {
       return "Each claim must be an object.";
     }
 
-    if (!claim.waypointId) {
-      return "Each claim must include waypointId.";
+    if (typeof claim.waypointId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(claim.waypointId)) {
+      return "Each claim must include a valid waypointId.";
     }
 
     if (!claim.card || !isValidCard(claim.card)) {
       return "Each claim must include a valid card.";
     }
 
-    if (typeof claim.claimedLat !== "number" || Number.isNaN(claim.claimedLat)) {
+    if (typeof claim.claimedLat !== "number" || !Number.isFinite(claim.claimedLat) || Math.abs(claim.claimedLat) > 90) {
       return "Each claim must include claimedLat.";
     }
 
-    if (typeof claim.claimedLng !== "number" || Number.isNaN(claim.claimedLng)) {
+    if (typeof claim.claimedLng !== "number" || !Number.isFinite(claim.claimedLng) || Math.abs(claim.claimedLng) > 180) {
       return "Each claim must include claimedLng.";
     }
 
     if (
       claim.gpsAccuracyMeters !== undefined &&
       claim.gpsAccuracyMeters !== null &&
-      (typeof claim.gpsAccuracyMeters !== "number" || Number.isNaN(claim.gpsAccuracyMeters))
+      (typeof claim.gpsAccuracyMeters !== "number" || !Number.isFinite(claim.gpsAccuracyMeters) || claim.gpsAccuracyMeters < 0)
     ) {
       return "gpsAccuracyMeters must be a number when provided.";
     }
@@ -295,9 +287,9 @@ function validatePayload(payload: SubmitHandPayload) {
   return null;
 }
 
-function validateCompletedHand(claims: SubmittedClaim[], waypoints: WaypointRow[]) {
-  if (claims.length !== waypoints.length) {
-    return "Submit a card for every active waypoint.";
+function validateHand(claims: SubmittedClaim[], waypoints: WaypointRow[], accepted: SubmittedClaim[] = []) {
+  if (claims.length < 1 || claims.length > waypoints.length) {
+    return "Collect between one card and the number of active waypoints.";
   }
 
   const waypointsById = new Map(waypoints.map((waypoint) => [waypoint.id, waypoint]));
@@ -321,8 +313,12 @@ function validateCompletedHand(claims: SubmittedClaim[], waypoints: WaypointRow[
     claimedWaypointIds.add(claim.waypointId!);
     claimedCards.add(claim.card!);
 
+    // Accepted proofs remain valid if an organiser later moves or shrinks a waypoint.
+    // Any change to an accepted proof still reaches the transaction's immutable check.
+    if (accepted.some(previous => sameRecordedClaim(previous, claim))) continue;
+
     if (claim.gpsAccuracyMeters !== null && claim.gpsAccuracyMeters! > MAX_GPS_ACCURACY_METERS) {
-      return "GPS accuracy was too low for one or more collected cards.";
+      return `${waypoint.name}: GPS accuracy was too low. Return to this waypoint for a fresh location fix; your card will be kept.`;
     }
 
     const distanceMeters = haversineMeters(
@@ -333,11 +329,16 @@ function validateCompletedHand(claims: SubmittedClaim[], waypoints: WaypointRow[
     );
 
     if (distanceMeters > waypoint.radius_meters) {
-      return "One or more collected cards were outside the waypoint claim radius.";
+      return `${waypoint.name}: the saved card location is outside the current ${waypoint.radius_meters} m radius (${Math.ceil(distanceMeters)} m away). Return inside this waypoint to refresh its location proof; your card will be kept.`;
     }
   }
 
   return null;
+}
+
+function sameRecordedClaim(a: SubmittedClaim, b: SubmittedClaim) {
+  return a.waypointId === b.waypointId && a.card === b.card && a.claimedAt === b.claimedAt &&
+    a.claimedLat === b.claimedLat && a.claimedLng === b.claimedLng && (a.gpsAccuracyMeters ?? null) === (b.gpsAccuracyMeters ?? null);
 }
 
 function validateEventTiming(event: EventRow, claims: SubmittedClaim[]) {
@@ -470,10 +471,6 @@ function normalizeNullableString(value: string | null | undefined) {
 
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-function timezoneNow() {
-  return new Date().toISOString();
 }
 
 function isValidCard(card: string) {

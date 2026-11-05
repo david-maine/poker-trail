@@ -94,24 +94,26 @@ const CARD_IMAGES: Record<string, ImageSourcePropType> = {
 };
 
 export default function PlayingCard({ card, compact = false, style }: Props) {
-  const cardImage = getCardImage(card);
+  const details = getCardDetails(card);
+  const cardImage = details?.image;
+  const label = details?.label ?? card;
 
   if (!cardImage) {
     return (
-      <View style={[styles.card, compact ? styles.compactCard : null, style]}>
+      <View accessible accessibilityRole="image" accessibilityLabel={label} style={[styles.card, compact ? styles.compactCard : null, style]}>
         <Text style={styles.fallbackText}>{card}</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.card, compact ? styles.compactCard : null, style]}>
-      <Image source={cardImage} style={styles.cardImage} resizeMode="contain" />
+    <View accessible accessibilityRole="image" accessibilityLabel={label} style={[styles.card, compact ? styles.compactCard : null, style]}>
+      <Image accessible={false} source={cardImage} style={styles.cardImage} resizeMode="contain" />
     </View>
   );
 }
 
-function getCardImage(card: string) {
+function getCardDetails(card: string) {
   const match = card.match(/^(10|[2-9JQKA])([SHDC])$/);
   if (!match) {
     return null;
@@ -120,7 +122,10 @@ function getCardImage(card: string) {
   const rank = RANK_NAMES[match[1]];
   const suit = SUIT_NAMES[match[2]];
 
-  return CARD_IMAGES[`${rank}-of-${suit}`] ?? null;
+  return {
+    image: CARD_IMAGES[`${rank}-of-${suit}`],
+    label: `${rank.charAt(0).toUpperCase()}${rank.slice(1)} of ${suit}`,
+  };
 }
 
 const styles = StyleSheet.create({
