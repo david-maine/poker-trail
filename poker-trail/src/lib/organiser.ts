@@ -1,6 +1,8 @@
 import { Session } from "@supabase/supabase-js";
 
-import { supabase } from "./supabase";
+import { organiserSupabase as supabase } from "./organiserSupabase";
+import { validateWaypointSet } from './organiserWaypointDraft';
+import type { WaypointSetup } from './organiserWaypointDraft';
 
 export type OrganiserEventStatus = "draft" | "active" | "closed" | "archived";
 export type OrganiserProofType = "gps" | "qr" | "code" | "staff";
@@ -18,6 +20,7 @@ type OrganiserEventRow = {
   event_code: string;
   name: string;
   description: string | null;
+  player_capacity: number | null;
   status: OrganiserEventStatus;
   starts_at: string | null;
   ends_at: string | null;
@@ -59,6 +62,7 @@ export type OrganiserEvent = {
   id: string;
   slug: string;
   eventCode: string;
+  playerCapacity: number | null;
   name: string;
   description: string | null;
   status: OrganiserEventStatus;
@@ -103,6 +107,32 @@ export type OrganiserDashboard = {
   summaries: Record<string, OrganiserEventSummary>;
 };
 
+export type OrganiserLeaderboardEntry = {
+  run_id: string;
+  started_at: string;
+  finished_at: string | null;
+  player_label: string;
+  leaderboard_rank: number;
+  visit_count: number;
+  total_waypoints: number;
+  best_hand_name: string | null;
+  best_hand_cards: string[] | null;
+};
+
+export async function loadOrganiserLeaderboard(eventId: string, signal: AbortSignal): Promise<OrganiserLeaderboardEntry[]> {
+  const entries: OrganiserLeaderboardEntry[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await supabase.from('leaderboard_entries')
+      .select('run_id, started_at, finished_at, player_label, leaderboard_rank, visit_count, total_waypoints, best_hand_name, best_hand_cards')
+      .eq('event_id', eventId).order('leaderboard_rank', { ascending: true }).order('run_id', { ascending: true })
+      .range(offset, offset + 999).abortSignal(signal);
+    if (error) throw error;
+    const page = (data ?? []) as OrganiserLeaderboardEntry[];
+    entries.push(...page);
+    if (page.length < 1000) return entries;
+  }
+}
+
 export type OrganiserEventInput = {
   id?: string | null;
   name: string;
@@ -118,7 +148,7 @@ export type OrganiserWaypointInput = {
 };
 
 const eventSelect =
-  "id, slug, event_code, name, description, status, starts_at, ends_at, created_by, created_at, updated_at";
+  "id, slug, event_code, name, description, player_capacity, status, starts_at, ends_at, created_by, created_at, updated_at";
 
 const waypointSelect =
   "id, event_id, code, name, latitude, longitude, radius_meters, sort_order, proof_type, proof_value, is_active, created_at, updated_at";
@@ -278,6 +308,28 @@ export async function loadOrganiserDashboard(): Promise<OrganiserDashboard> {
   };
 }
 
+export async function deleteOrganiserEvent(eventId: string): Promise<void> {
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to delete organiser events.');
+  const { data, error } = await supabase.from('events').delete()
+    .eq('id', eventId).eq('created_by', session.user.id).select('id').single();
+  if (error) throw error;
+  if (!data) throw new Error('Event could not be deleted. Check your access and try again.');
+}
+
+export async function createOrganiserEventWithWaypoints(input: { name: string; waypoints: WaypointSetup[] }): Promise<OrganiserEvent> {
+  const name = normalizeRequiredText(input.name, 'Event name');
+  validateWaypointSet(input.waypoints);
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to create organiser events.');
+  const { data, error } = await supabase.rpc('create_organiser_event_with_waypoints', {
+    p_name: name,
+    p_waypoints: input.waypoints.map(point => ({ slot_index: point.slotIndex, latitude: point.latitude, longitude: point.longitude, radius_meters: point.radiusMeters })),
+  });
+  if (error) throw error;
+  return mapEventRow(data as OrganiserEventRow);
+}
+
 export async function saveOrganiserEvent(
   input: OrganiserEventInput
 ): Promise<OrganiserEvent> {
@@ -303,7 +355,7 @@ export async function saveOrganiserEvent(
   };
 
   if (!input.id) {
-    payload.status = "active";
+    payload.status = "draft";
   }
 
   const query = input.id
@@ -355,7 +407,7 @@ export async function saveOrganiserWaypoint(
     is_active: true,
   };
 
-  if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude)) {
+  if (!Number.isFinite(payload.latitude) || !Number.isFinite(payload.longitude) || Math.abs(payload.latitude) > 90 || Math.abs(payload.longitude) > 180) {
     throw new Error("Latitude and longitude must be valid numbers.");
   }
 
@@ -467,6 +519,7 @@ function mapEventRow(row: OrganiserEventRow): OrganiserEvent {
     eventCode: row.event_code,
     name: row.name,
     description: row.description,
+    playerCapacity: row.player_capacity,
     status: row.status,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
@@ -548,4 +601,29 @@ async function clearAnonymousSession() {
 
 function isAnonymousSession(session: Session) {
   return Boolean((session.user as { is_anonymous?: boolean }).is_anonymous);
+}
+
+export async function publishOrganiserEvent(eventId: string) {
+  const { error } = await supabase.from("events").update({ status: "active" }).eq("id", eventId).select("id").single();
+  if (error) throw error;
+}
+
+export async function closeOrganiserEvent(eventId: string): Promise<void> {
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to close organiser events.');
+  const { error } = await supabase.from('events').update({ status: 'closed' })
+    .eq('id', eventId).eq('created_by', session.user.id).eq('status', 'active').select('id').single();
+  if (error) throw error;
+}
+
+export async function requestOrganiserPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: typeof window === "undefined" ? undefined : window.location.origin + "/organiser/reset-password",
+  });
+  if (error) throw error;
+}
+
+export async function updateOrganiserPassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
 }

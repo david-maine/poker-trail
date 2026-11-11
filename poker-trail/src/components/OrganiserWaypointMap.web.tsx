@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import type { OrganiserWaypoint } from "../lib/organiser";
-import type { WaypointMapPoint } from "./OrganiserWaypointMap";
+import type { WaypointMapPoint, WaypointMapWaypoint } from "./OrganiserWaypointMap";
 
 import { loadGoogleMaps, mapsApiKey } from "../lib/googleMaps.web";
 import type { GoogleMapsApi, GoogleCircle, GoogleMap, GoogleMarker, GoogleWindow, GoogleLatLng, GooglePoint } from "../lib/googleMaps.web";
@@ -11,8 +10,9 @@ type Props = {
   currentPoint: WaypointMapPoint | null;
   radiusMeters: number;
   selectedSlotIndex: number;
-  waypoints: OrganiserWaypoint[];
+  waypoints: WaypointMapWaypoint[];
   onPick: (point: WaypointMapPoint) => void;
+  autoPickUserLocation?: boolean;
 };
 
 export default function OrganiserWaypointMap({
@@ -21,6 +21,7 @@ export default function OrganiserWaypointMap({
   selectedSlotIndex,
   waypoints,
   onPick,
+  autoPickUserLocation = true,
 }: Props) {
   const [containerNode, setContainerNode] = useState<HTMLElement | null>(null);
   const [map, setMap] = useState<GoogleMap | null>(null);
@@ -32,13 +33,16 @@ export default function OrganiserWaypointMap({
   const hasRequestedInitialLocationRef = useRef(false);
   const markersRef = useRef<GoogleMarker[]>([]);
   const circlesRef = useRef<GoogleCircle[]>([]);
+  const fittedMapRef = useRef<GoogleMap | null>(null);
+  const onPickRef = useRef(onPick);
+  useEffect(() => { onPickRef.current = onPick; }, [onPick]);
   const selectedWaypointExists = useMemo(
     () => waypoints.some((waypoint) => waypoint.sortOrder === selectedSlotIndex),
     [selectedSlotIndex, waypoints]
   );
 
   const allPoints = useMemo(() => {
-    const points = waypoints.map((waypoint) => ({
+    const points = waypoints.filter((waypoint) => !currentPoint || waypoint.sortOrder !== selectedSlotIndex).map((waypoint) => ({
       latitude: waypoint.latitude,
       longitude: waypoint.longitude,
     }));
@@ -48,7 +52,7 @@ export default function OrganiserWaypointMap({
     }
 
     return points;
-  }, [currentPoint, waypoints]);
+  }, [currentPoint, selectedSlotIndex, waypoints]);
 
   const initialCenter = useMemo(
     () =>
@@ -69,11 +73,11 @@ export default function OrganiserWaypointMap({
         map.setZoom(15);
       }
 
-      if (!currentPoint && !selectedWaypointExists) {
+      if (autoPickUserLocation && !currentPoint && !selectedWaypointExists) {
         onPick(point);
       }
     },
-    [currentPoint, map, onPick, selectedWaypointExists]
+    [autoPickUserLocation, currentPoint, map, onPick, selectedWaypointExists]
   );
 
   const requestUserLocation = useCallback(() => {
@@ -133,12 +137,12 @@ export default function OrganiserWaypointMap({
   }, [applyUserLocation]);
 
   useEffect(() => {
-    if (!userPoint || currentPoint || selectedWaypointExists) {
+    if (!autoPickUserLocation || !userPoint || currentPoint || selectedWaypointExists) {
       return;
     }
 
     onPick(userPoint);
-  }, [currentPoint, onPick, selectedWaypointExists, userPoint]);
+  }, [autoPickUserLocation, currentPoint, onPick, selectedWaypointExists, userPoint]);
 
   useEffect(() => {
     let isMounted = true;
@@ -190,7 +194,7 @@ export default function OrganiserWaypointMap({
     nextMap.addListener("click", (event) => {
       const point = toPoint(event.latLng);
       if (point) {
-        onPick(point);
+        onPickRef.current(point);
       }
     });
 
@@ -220,7 +224,7 @@ export default function OrganiserWaypointMap({
           text: String(waypoint.sortOrder + 1),
         },
         map,
-        position: toGooglePoint(waypoint),
+        position: toGooglePoint(isSelected && currentPoint ? currentPoint : waypoint),
         title: waypoint.name,
       });
 
@@ -283,11 +287,11 @@ export default function OrganiserWaypointMap({
       const isSelected = waypoint.sortOrder === selectedSlotIndex;
       const circle = new mapsApi.Circle({
         clickable: false,
-        center: toGooglePoint(waypoint),
+        center: toGooglePoint(isSelected && currentPoint ? currentPoint : waypoint),
         fillColor: isSelected ? "#0f766e" : "#6b7280",
         fillOpacity: isSelected ? 0.14 : 0.08,
         map,
-        radius: waypoint.radiusMeters,
+        radius: isSelected && currentPoint ? radiusMeters : waypoint.radiusMeters,
         strokeColor: isSelected ? "#0f766e" : "#6b7280",
         strokeOpacity: isSelected ? 0.8 : 0.38,
         strokeWeight: isSelected ? 2 : 1,
@@ -321,9 +325,12 @@ export default function OrganiserWaypointMap({
   }, [currentPoint, map, mapsApi, radiusMeters, selectedSlotIndex, waypoints]);
 
   useEffect(() => {
-    if (!map || !mapsApi || allPoints.length === 0) {
+    if (!map || !mapsApi || allPoints.length === 0 || fittedMapRef.current === map) {
       return;
     }
+
+    // Fit once on load; editing coordinates must preserve the user's viewport.
+    fittedMapRef.current = map;
 
     if (allPoints.length === 1) {
       map.setCenter(toGooglePoint(allPoints[0]));

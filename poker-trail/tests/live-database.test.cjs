@@ -48,6 +48,51 @@ test('live-hand migration and transactional claims in PostgreSQL', async t => {
   const claims = waypoints.map((id, i) => ({ waypointId: id, card: cards[i], claimedAt: `2026-11-04T01:00:0${i}.000Z`, claimedLat: 0, claimedLng: 0, gpsAccuracyMeters: 5 }));
   const apply = async snapshot => (await db.query('select apply_hand_snapshot($1,$2::jsonb,$3::jsonb) as value', [actualRun, JSON.stringify(snapshot), JSON.stringify(evaluateBestHand(snapshot.map(c => c.card)))])).rows[0].value.run;
 
+
+  await t.test('organiser drafts, ownership, publishing and free capacity are enforced by PostgreSQL', async () => {
+    const organiser = randomUUID(), outsider = randomUUID(), draft = randomUUID();
+    await db.exec('reset role');
+    await db.query('insert into auth.users(id) values ($1),($2)', [organiser, outsider]);
+    await asPlayer(organiser);
+    await assert.rejects(db.query("insert into events(slug,name,status,created_by) values ('bad-active','Bad','active',$1)", [organiser]), /draft/);
+    await db.query("insert into events(id,slug,name,status,created_by) values ($1,'portal-draft','Portal','draft',$2)", [draft, organiser]);
+    const cap = (await db.query('select player_capacity from events where id=$1', [draft])).rows[0].player_capacity;
+    assert.equal(cap, 25);
+    await assert.rejects(db.query('update events set player_capacity=500 where id=$1', [draft]), /capacity/);
+    await assert.rejects(db.query("update events set status='active' where id=$1", [draft]), /five valid/);
+    await assert.rejects(db.query("insert into runs(event_id,user_id,display_name) values ($1,$2,'Early')", [draft, organiser]), /not open/);
+    await asPlayer(outsider);
+    assert.equal((await db.query('select id from events where id=$1', [draft])).rows.length, 0);
+    assert.equal((await db.query("update events set name='Stolen' where id=$1 returning id", [draft])).rows.length, 0);
+    await assert.rejects(db.query("insert into waypoints(event_id,code,name,latitude,longitude,sort_order) values ($1,'stolen','Stolen',0,0,0)", [draft]), /row-level/);
+    await asPlayer(organiser);
+    for(let i=0;i<5;i++) await db.query('insert into waypoints(event_id,code,name,latitude,longitude,sort_order) values ($1,$2,$2,0,0,$3)', [draft,'portal-'+i,i]);
+    await db.query("update events set status='active' where id=$1", [draft]);
+    await db.exec('reset role');
+    const players=Array.from({length:26},()=>randomUUID());
+    for(const user of players) await db.query('insert into auth.users(id) values ($1)',[user]);
+    for(const user of players.slice(0,25)) {
+      await asPlayer(user);
+      await db.query("insert into runs(event_id,user_id,display_name) values ($1,$2,'Crew')",[draft,user]);
+    }
+    await asPlayer(players[25]);
+    await assert.rejects(db.query("insert into runs(event_id,user_id,display_name) values ($1,$2,'Full')",[draft,players[25]]), /capacity/);
+    await asPlayer(players[0]);
+    await db.query("insert into runs(event_id,user_id,display_name) values ($1,$2,'Crew') on conflict(event_id,user_id) do update set display_name=excluded.display_name",[draft,players[0]]);
+    await db.exec('reset role');
+    await db.query("update runs set status='abandoned' where event_id=$1 and user_id=$2",[draft,players[0]]);
+    await asPlayer(players[25]);
+    await assert.rejects(db.query("insert into runs(event_id,user_id,display_name) values ($1,$2,'Full')",[draft,players[25]]), /capacity/);
+    await db.exec('reset role');
+    // Existing events remain unlimited and platform admin retains active event creation.
+    assert.equal((await db.query('select player_capacity from events where id=$1',[event])).rows[0].player_capacity,null);
+    await db.query("insert into admin_users(user_id,display_name) values ($1,'Admin')",[outsider]);
+    await asPlayer(outsider);
+    await db.query("insert into events(slug,name,status) values ('admin-preserved','Admin event','active')");
+    await db.exec('reset role');
+    await db.query("delete from events where id=$1 or slug='admin-preserved'",[draft]);
+  });
+
   await t.test('registration immediately publishes a zero-card entry', async () => {
     const row = (await readBoard()).rows[0];
     assert.equal(row.player_label, 'New Crew'); assert.equal(row.visit_count, 0);

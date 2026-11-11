@@ -59,3 +59,37 @@ The test, create-test-leaderboard.cjs and update-demo-event.cjs require an expli
 No live tests are needed simply to change local configuration.
 The unrelated remove-second-david.cjs script remains untouched and still expects
 the old env layout; do not run it as part of environment setup.
+
+## Organiser portal first release
+
+Start with npm run dev:web and open /organiser. The portal has sign-in, sign-up,
+password reset, an event dashboard, /organiser/events/new, and per-event overview,
+waypoints and billing routes under /organiser/events/:eventId. Use ?slot=1 through
+?slot=5 to link to a waypoint. Organiser authentication is stored separately from
+player and platform admin sessions. /admin and the player routes are unchanged.
+
+Creating an organiser event requires a name and five valid GPS waypoints, with a
+positive whole-number radius (20m by default). The creation form uses the same
+responsive map editor as the Waypoints tab and retains edits when switching slots.
+Create event calls create_organiser_event_with_waypoints: PostgreSQL saves the owned
+draft and its five waypoints, then publishes it in one transaction. Any failure
+rolls back all writes. New events open immediately with 25-player capacity and a
+join code. Existing drafts can still be configured and published separately.
+PostgreSQL enforces ownership, publishing
+requirements and capacity, including concurrent last-slot registrations. Existing
+events retain unlimited capacity, and existing registered players may rejoin at
+capacity. The billing page reports capacity; paid tiers and checkout are not
+configured and have no purchase action. All new database changes are deployed to
+development only, including 20261111140000_create_event_with_waypoints.sql.
+Production needs the pending organiser migrations before releasing this code.
+
+For password recovery, allow /organiser/reset-password on the web origin in
+Supabase Auth redirect settings. Local 8081 and 8082 URLs are in config.toml; hosted
+origins must be added when deploying the portal. Email delivery must be configured
+for a hosted production release.
+
+The Expo static export builds dynamic route templates. Static hosting must rewrite
+unmatched /organiser/events/* requests to /organiser/index.html (HTTP 200), preserving
+the requested URL and serving existing files first. public/_redirects supplies this
+rule for Netlify/Cloudflare Pages; configure the equivalent on other hosts. This
+allows direct event URLs and browser refresh without changing player/admin routes.

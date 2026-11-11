@@ -7,12 +7,15 @@ export type WaypointMapPoint = {
   longitude: number;
 };
 
+export type WaypointMapWaypoint = Pick<OrganiserWaypoint, 'latitude' | 'longitude' | 'radiusMeters' | 'sortOrder' | 'name'>;
+
 type Props = {
   currentPoint: WaypointMapPoint | null;
   radiusMeters: number;
   selectedSlotIndex: number;
-  waypoints: OrganiserWaypoint[];
+  waypoints: WaypointMapWaypoint[];
   onPick: (point: WaypointMapPoint) => void;
+  autoPickUserLocation?: boolean;
 };
 
 export default function OrganiserWaypointMap(_props: Props) {
