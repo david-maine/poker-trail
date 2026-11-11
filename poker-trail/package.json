@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
+    "@expo-google-fonts/lilita-one": "^0.4.1",
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo-google-fonts/roboto-slab": "^0.4.2",
     "@expo-google-fonts/stoke": "^0.4.1",
