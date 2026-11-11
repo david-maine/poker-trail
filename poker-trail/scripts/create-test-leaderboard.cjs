@@ -6,7 +6,9 @@ const { randomUUID } = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
 const checked = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
 async function main() {
-  for (const file of ['.env', '.env.local']) if (fs.existsSync(file)) Object.assign(process.env, require('node:util').parseEnv(fs.readFileSync(file, 'utf8')));
+  const { environmentFor } = require('./start-environment.cjs');
+  if (process.argv.includes('--development') === process.argv.includes('--production')) throw new Error('Choose exactly one of --development or --production.');
+  Object.assign(process.env, environmentFor(process.argv.includes('--development') ? 'development' : 'production'));
   const ref = fs.readFileSync('supabase/.temp/project-ref', 'utf8').trim();
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
   if (new URL(url).hostname.split('.')[0] !== ref) throw new Error('Linked project mismatch');

@@ -5,10 +5,12 @@
   },
   "build": {
     "development": {
+      "environment": "development",
       "developmentClient": true,
       "distribution": "internal"
     },
     "preview": {
+      "environment": "development",
       "distribution": "internal"
     },
     "production": {

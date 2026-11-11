@@ -7,9 +7,14 @@ const assert = require('node:assert/strict');
 const { createClient } = require('@supabase/supabase-js');
 
 async function main() {
-  for (const file of ['.env', '.env.local']) {
-    if (fs.existsSync(file)) Object.assign(process.env, require('node:util').parseEnv(fs.readFileSync(file, 'utf8')));
+  const { environmentFor } = require('./start-environment.cjs');
+  if (!process.argv.includes('--development') && !process.argv.includes('--production')) {
+    throw new Error('Choose --development or --production explicitly for the live test.');
   }
+  if (process.argv.includes('--development') && process.argv.includes('--production')) {
+    throw new Error('Choose only one environment.');
+  }
+  Object.assign(process.env, environmentFor(process.argv.includes('--development') ? 'development' : 'production'));
   const ref = fs.readFileSync('supabase/.temp/project-ref', 'utf8').trim();
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
   assert.equal(new URL(url).hostname.split('.')[0], ref, 'Linked and app projects must match');
