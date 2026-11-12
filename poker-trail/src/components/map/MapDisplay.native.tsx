@@ -2,8 +2,8 @@ import React, { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Circle, Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
 
-import { Waypoint } from "../src/types";
-import type { MapControlLayout } from "../src/lib/responsiveLayout";
+import { Waypoint } from "../../types";
+import type { MapControlLayout } from "../../lib/responsiveLayout";
 
 type UserLocation = {
   latitude: number;
@@ -100,7 +100,7 @@ export default function MapDisplay({ waypoints, visited, userLocation, controls 
           !userLocation ? styles.recenterButtonDisabled : null,
         ]}
       >
-        <Image accessible={false} source={require("../assets/images/POKER-TRAIL-icon-location.png")} resizeMode="contain" style={styles.controlIcon} />
+        <Image accessible={false} source={require("../../../assets/images/POKER-TRAIL-icon-location.png")} resizeMode="contain" style={styles.controlIcon} />
       </Pressable>
     </View>
   );

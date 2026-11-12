@@ -8,7 +8,6 @@
     "prod": "node scripts/start-environment.cjs production",
     "prod:web": "node scripts/start-environment.cjs production --web",
     "start": "node scripts/start-environment.cjs production",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "node scripts/start-environment.cjs production --android",
     "ios": "node scripts/start-environment.cjs production --ios",
     "web": "node scripts/start-environment.cjs production --web",

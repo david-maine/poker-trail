@@ -1,1 +1,1 @@
-export { DashboardPage as default } from "../../src/components/OrganiserPortal";
+export { DashboardPage as default } from "../../src/components/organiser/OrganiserPortal";

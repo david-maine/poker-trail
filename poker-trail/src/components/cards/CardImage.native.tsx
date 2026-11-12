@@ -1,6 +1,6 @@
 import { Image as CachedImage } from "expo-image";
 import { Image, type ImageProps } from "react-native";
-import { CARD_IMAGES, CARD_BACK_IMAGE } from "../lib/cardImages";
+import { CARD_IMAGES, CARD_BACK_IMAGE } from "../../lib/cardImages";
 
 export default function CardImage({ source, accessibilityLabel, accessible, style, onError }: ImageProps) {
   return <CachedImage source={source} accessibilityLabel={accessibilityLabel} accessible={accessible}

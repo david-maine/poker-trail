@@ -1,1 +1,1 @@
-export { AuthPage as default } from "../../src/components/OrganiserPortal";
+export { AuthPage as default } from "../../src/components/organiser/OrganiserPortal";

@@ -49,8 +49,8 @@ test('a collected card remains identifiable when its image fails to load', () =>
     './CardImage': {default:'Image'},
     react: {default:{}, useState:()=>[failed, value=>{failed=value;}]},
     'react-native': {View:'View',Text:'Text',Image:'Image',StyleSheet:{create:value=>value}},
-    '../lib/cardImages': {CARD_IMAGES:{'ace-of-hearts':{uri:'offline-image'}}},
-  })('src/components/PlayingCard.tsx').default;
+    '../../lib/cardImages': {CARD_IMAGES:{'ace-of-hearts':{uri:'offline-image'}}},
+  })('src/components/cards/PlayingCard.tsx').default;
   const image = Card({card:'AH'}).props.children;
   image.props.onError();
   const fallback = Card({card:'AH'});
@@ -69,8 +69,8 @@ test('native deck warming deduplicates requests and retries failed prefetches', 
   const native=loader({
     'expo-image': {Image:CachedImage},
     'react-native': {Image:{resolveAssetSource:source=>({uri:'asset:'+source})}},
-    '../lib/cardImages': {CARD_IMAGES:{ace:1,king:2},CARD_BACK_IMAGE:3},
-  })('src/components/CardImage.native.tsx');
+    '../../lib/cardImages': {CARD_IMAGES:{ace:1,king:2},CARD_BACK_IMAGE:3},
+  })('src/components/cards/CardImage.native.tsx');
   const first=native.preloadCardImages();
   assert.equal(native.preloadCardImages(),first);
   await first;

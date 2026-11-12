@@ -7,13 +7,13 @@ test('leaderboard defers row rendering to the virtualized list', () => {
   let compareRows;
   const Screen = loader({
     react: {memo:(fn, compare)=>{compareRows=compare;return fn;},useState: () => [state[cursor++],()=>{}],useRef: current=>({current}),useEffect(){},useCallback: fn=>fn},
-    '../../src/components/CardImage': {default:'Image',preloadCardImages(){}},
+    '../../src/components/cards/CardImage': {default:'Image',preloadCardImages(){}},
     'react-native': {Platform:{OS:'web'},View:'View',Text:'Text',Image:'Image',Pressable:'Pressable',ScrollView:'ScrollView',FlatList:'FlatList',StyleSheet:{create:s=>s}},
     '@expo/vector-icons': {Ionicons:'Icon'},
     '@react-navigation/native': {useFocusEffect(){}},
     '../../src/components/LeaveEventButton': {default:'Leave'},
     '../../src/components/LoadingStatus': {default:'Loading'},
-    '../../src/components/PlayingCard': {default:'Card'},
+    '../../src/components/cards/PlayingCard': {default:'Card'},
     '../../src/components/HandSyncStatus': {default:'Sync'},
     '../../src/hooks/useResponsiveLayout': {default:()=>({contentWidth:354,contentMaxWidth:720,cardHeight:100,cardGap:8,height:844,gap:12})},
     '../../src/lib/eventSession': {useEventSession:()=>({registrationState:{event:{id:'event'}}})},

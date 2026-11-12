@@ -3,8 +3,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, StyleSheet, View } from "react-native";
 
-import MapDisplay from "../../components/MapDisplay";
-import CardRow from "../../src/components/CardRow";
+import MapDisplay from "../../src/components/map/MapDisplay";
+import CardRow from "../../src/components/cards/CardRow";
 import LeaveEventButton from "../../src/components/LeaveEventButton";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import useLocation from "../../src/hooks/useLocation";

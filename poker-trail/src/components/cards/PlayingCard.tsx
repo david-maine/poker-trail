@@ -1,4 +1,4 @@
-import { CARD_IMAGES } from "../lib/cardImages";
+import { CARD_IMAGES } from "../../lib/cardImages";
 import CardImage from "./CardImage";
 import React, { useState } from "react";
 import {

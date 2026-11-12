@@ -1,4 +1,4 @@
-# Welcome to your Expo app 👋
+# Poker Trail
 
 ## Live hands and leaderboard
 
@@ -29,51 +29,16 @@ The `submit-hand` payload remains `{ eventId, claims, clientScore? }`; one or mo
 
 After logging in to the linked project with the Supabase CLI, run `node scripts/verify-live-hands.cjs` for the explicit live smoke test. It creates a disposable event and two accounts, checks live notifications and per-card syncing, and removes its test data. It reads credentials through the CLI without printing or storing them. Run with `--cleanup-only` to remove leftover verification events after an interrupted test.
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+## Structure and naming
 
-## Get started
+- app/: Expo Router routes and layouts. Route names define URLs; retain dynamic segments and lowercase kebab-case.
+- src/components/: shared UI, grouped into cards/, map/, and organiser/. React components use PascalCase; supporting modules use camelCase.
+- src/components/map/MapDisplay: the player map entry point with colocated native and web implementations.
+- src/hooks/: React hooks named useSomething.
+- src/lib/: services, state, and pure helpers in camelCase. src/types.ts holds shared domain types.
+- assets/: bundled images and fonts. public/: web hosting files.
+- supabase/: database migrations, seed data, and deployed functions. Preserve migration timestamps and deployed function names.
+- scripts/: build, environment, and maintenance commands in kebab-case. Live verification scripts can create remote data; run deliberately.
+- tests/: local Node tests in kebab-case.test.cjs and the shared TypeScript loader.
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Run commands from this directory: npm install, then npm run dev or npm run dev:web. See [DEVELOPMENT.md](DEVELOPMENT.md) for setup and [BILLING.md](BILLING.md) for billing operations. Run the checks listed above before submitting changes.

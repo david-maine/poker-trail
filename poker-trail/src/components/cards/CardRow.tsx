@@ -1,9 +1,9 @@
-import { CARD_BACK_IMAGE } from "../lib/cardImages";
+import { CARD_BACK_IMAGE } from "../../lib/cardImages";
 import React, { useState } from "react";
 import { Image, View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
 
 import PlayingCard from "./PlayingCard";
-import { getCardRowLayout } from "../lib/responsiveLayout";
+import { getCardRowLayout } from "../../lib/responsiveLayout";
 
 type Props = {
   visitOrder: string[];

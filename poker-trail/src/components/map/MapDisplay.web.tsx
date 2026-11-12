@@ -1,12 +1,12 @@
-import { APP_BACKGROUND_COLOR } from "../lib/theme";
+import { APP_BACKGROUND_COLOR } from "../../lib/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
-import StatusPill from "./StatusPill";
+import StatusPill from "../StatusPill";
 
-import { loadGoogleMaps } from "../lib/googleMaps.web";
-import type { GoogleWindow } from "../lib/googleMaps.web";
-import { createPlayerMap } from "../lib/playerMap.web";
-import type { PlayerMapState } from "../lib/playerMap.web";
+import { loadGoogleMaps } from "../../lib/googleMaps.web";
+import type { GoogleWindow } from "../../lib/googleMaps.web";
+import { createPlayerMap } from "../../lib/playerMap.web";
+import type { PlayerMapState } from "../../lib/playerMap.web";
 
 export default function MapDisplay(props: PlayerMapState) {
   const controls = props.controls ?? { top: 56, left: 16, size: 48 };
@@ -58,7 +58,7 @@ export default function MapDisplay(props: PlayerMapState) {
       <Pressable accessibilityRole="button" accessibilityLabel="Recenter map on your location"
         disabled={loading || Boolean(error) || !props.userLocation} onPress={() => controller.current?.recenter()}
         style={({ pressed }) => [styles.recenter, { top: controls.top, left: controls.left, width: controls.size, height: controls.size, borderRadius: controls.size / 2 }, pressed && styles.pressed, (loading || Boolean(error) || !props.userLocation) && styles.disabled]}>
-        <Image accessible={false} source={require("../../assets/images/POKER-TRAIL-icon-location.png")} resizeMode="contain" style={styles.controlIcon} />
+        <Image accessible={false} source={require("../../../assets/images/POKER-TRAIL-icon-location.png")} resizeMode="contain" style={styles.controlIcon} />
       </Pressable>
     </View>
   );

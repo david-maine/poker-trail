@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
-import CardRow from './CardRow';
-import { loadOrganiserLeaderboard } from '../lib/organiser';
-import type { OrganiserLeaderboardEntry } from '../lib/organiser';
-import { TRAIL_INK } from '../lib/theme';
-import { LANDING_BUTTON_FONT, LANDING_INPUT_FONT, getOrganiserDetailSize } from '../lib/landingTypography';
+import CardRow from '../cards/CardRow';
+import { loadOrganiserLeaderboard } from '../../lib/organiser';
+import type { OrganiserLeaderboardEntry } from '../../lib/organiser';
+import { TRAIL_INK } from '../../lib/theme';
+import { LANDING_BUTTON_FONT, LANDING_INPUT_FONT, getOrganiserDetailSize } from '../../lib/landingTypography';
 import { RobotoSlab_800ExtraBold } from '@expo-google-fonts/roboto-slab/800ExtraBold';
 import { Montserrat_500Medium_Italic } from '@expo-google-fonts/montserrat/500Medium_Italic';
 import { useFonts } from 'expo-font';

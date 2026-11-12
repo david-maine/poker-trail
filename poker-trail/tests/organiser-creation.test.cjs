@@ -39,7 +39,7 @@ test('creation service validates before sending one organiser RPC and propagates
  assert.equal(calls,2);
 });
 
-test('transactional creation publishes five owned waypoints and rolls back failures',async t=>{
+test('transactional creation saves a draft with five waypoints and rolls back failures',async t=>{
  const db=new PGlite();t.after(()=>db.close());
  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
  create schema auth; create table auth.users(id uuid primary key);
@@ -63,17 +63,30 @@ test('transactional creation publishes five owned waypoints and rolls back failu
  const create=(name,items=payload)=>db.query('select * from public.create_organiser_event_with_waypoints($1,$2::jsonb)',[name,JSON.stringify(items)]);
  await asUser(owner);
  const event=(await create('Created together')).rows[0];
- assert.equal(event.status,'active');assert.equal(event.created_by,owner);assert.equal(event.player_capacity,25);assert.ok(event.event_code);
+ assert.equal(event.status,'draft');assert.equal(event.created_by,owner);assert.equal(event.player_capacity,25);assert.ok(event.event_code);
  const saved=(await db.query('select * from waypoints where event_id=$1 order by sort_order',[event.id])).rows;
  assert.equal(saved.length,5);assert.equal(saved[0].latitude,0);assert.equal(saved[0].longitude,0);assert.equal(saved[4].code,'wp5');
  for(const invalid of [payload.slice(0,4),payload.map(p=>({...p,slot_index:0})),payload.map(p=>({...p,latitude:null})),payload.map(p=>({...p,radius_meters:0})),payload.map(p=>({...p,longitude:181}))]) {
   await assert.rejects(create('Invalid',invalid));
  }
  await assert.rejects(create(' '),/required/);
- await assert.rejects(create('Fail publish'),/Publication fixture failure/);
+
  await assert.rejects(create('Fail waypoint',payload.map((p,i)=>i===4?{...p,radius_meters:999}:p)),/Waypoint fixture failure/);
  assert.equal((await db.query("select count(*)::int as n from events where name in ('Invalid','Fail publish','Fail waypoint')")).rows[0].n,0);
  assert.equal((await db.query('select count(*)::int as n from waypoints where event_id in (select id from events where created_by=$1)',[owner])).rows[0].n,5);
+ const draft=(name,items=[],capacity=25)=>db.query('select * from public.create_organiser_event_draft($1,$2::jsonb,$3)',[name,JSON.stringify(items),capacity]);
+ const empty=(await draft('Name only')).rows[0];assert.equal(empty.status,'draft');assert.equal(empty.first_published_at,null);assert.equal(empty.requested_capacity,25);
+ const partial=(await draft('Partial paid',payload.slice(0,2),100)).rows[0];assert.equal(partial.player_capacity,25);assert.equal(partial.requested_capacity,100);
+ assert.equal((await db.query('select count(*)::int as n from waypoints where event_id=$1',[partial.id])).rows[0].n,2);
+ await assert.rejects(db.query("update events set status='active' where id=$1",[empty.id]),/five/);
+ const paid=(await draft('Ready paid',payload,100)).rows[0];
+ await assert.rejects(db.query("update events set status='active' where id=$1",[paid.id]),/payment/);
+ const free=(await draft('Ready free',payload)).rows[0];await db.query("update events set status='active' where id=$1",[free.id]);
+ assert.ok((await db.query('select first_published_at from events where id=$1',[free.id])).rows[0].first_published_at);
+ await assert.rejects(draft('Too many',[...payload,payload[0]]),/five/);await assert.rejects(draft('Bad tier',[],75),/capacity/);
+ await assert.rejects(draft('Invalid partial',[{...payload[0],latitude:null}]),/valid numbers/);
+ await assert.rejects(draft('Fail partial',[{...payload[0],radius_meters:999}]),/fixture/);
+ assert.equal((await db.query("select count(*)::int as n from events where name='Fail partial'")).rows[0].n,0);
  await asUser(outsider);await assert.rejects(create('No profile'),/organiser account/);
  await asUser('');await assert.rejects(create('No session'),/organiser account/);
  await db.exec('reset role;set role anon');await assert.rejects(create('Anonymous'),/permission denied/);

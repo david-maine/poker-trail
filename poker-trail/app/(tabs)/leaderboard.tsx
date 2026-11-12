@@ -9,8 +9,8 @@ import LeaveEventButton from "../../src/components/LeaveEventButton";
 import useResponsiveLayout from "../../src/hooks/useResponsiveLayout";
 import { getCardRowLayout } from "../../src/lib/responsiveLayout";
 import LoadingStatus from "../../src/components/LoadingStatus";
-import CardImage, { preloadCardImages } from "../../src/components/CardImage";
-import PlayingCard from "../../src/components/PlayingCard";
+import CardImage, { preloadCardImages } from "../../src/components/cards/CardImage";
+import PlayingCard from "../../src/components/cards/PlayingCard";
 import { useEventSession } from "../../src/lib/eventSession";
 import {
   LeaderboardEntry,

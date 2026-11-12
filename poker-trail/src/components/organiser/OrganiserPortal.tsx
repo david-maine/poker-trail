@@ -1,51 +1,57 @@
-import { Slot, useLocalSearchParams, usePathname, useRouter } from "expo-router";
+import { Slot, useGlobalSearchParams, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import type { Href } from "expo-router";
 import Feather from "@expo/vector-icons/Feather";
+import { RobotoSlab_400Regular } from '@expo-google-fonts/roboto-slab/400Regular';
+import { RobotoSlab_600SemiBold } from '@expo-google-fonts/roboto-slab/600SemiBold';
+import { RobotoSlab_700Bold } from '@expo-google-fonts/roboto-slab/700Bold';
 import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
 import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Medium_Italic";
 import { useFonts } from "expo-font";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
-import type { StyleProp, TextStyle } from "react-native";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import OrganiserWaypointEditor from "./OrganiserWaypointEditor";
-import { emptyWaypointDraft, parseWaypointDraft } from '../lib/organiserWaypointDraft';
-import type { WaypointDraft } from '../lib/organiserWaypointDraft';
+import { emptyWaypointDraft, parseWaypointDraft } from '../../lib/organiserWaypointDraft';
+import type { WaypointDraft } from '../../lib/organiserWaypointDraft';
 import OrganiserLeaderboard from "./OrganiserLeaderboard";
-import { organiserSupabase } from "../lib/organiserSupabase";
-import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE } from "../lib/theme";
-import { LANDING_BUTTON_FONT, LANDING_INPUT_FONT, getOrganiserHeadingSize, getOrganiserDetailSize } from "../lib/landingTypography";
+import { organiserSupabase } from "../../lib/organiserSupabase";
+import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE } from "../../lib/theme";
+import { LANDING_BUTTON_FONT, LANDING_INPUT_FONT, getOrganiserHeadingSize, getOrganiserDetailSize } from "../../lib/landingTypography";
 import {
   getOrganiserSession, loadOrganiserDashboard, saveOrganiserEvent, saveOrganiserWaypoint,
   signInOrganiser, signUpOrganiser, signOutOrganiser, publishOrganiserEvent,
   requestOrganiserPasswordReset, updateOrganiserPassword,
   deleteOrganiserEvent, closeOrganiserEvent,
-  createOrganiserEventWithWaypoints,
-} from "../lib/organiser";
-import type { OrganiserDashboard, OrganiserEvent, OrganiserWaypoint } from "../lib/organiser";
+  createOrganiserDraft,
+} from "../../lib/organiser";
+import EventBillingPanel from './EventBillingPanel';
+import { loadCapacityTiers, openEventCheckout, eventExpired, money } from '../../lib/eventBilling';
+import type { CapacityTier } from '../../lib/eventBilling';
+import type { OrganiserDashboard, OrganiserEvent, OrganiserWaypoint } from "../../lib/organiser";
 
 type PortalState = { dashboard: OrganiserDashboard | null; refresh: () => Promise<void>; recovery: boolean };
 const Context = createContext<PortalState>({ dashboard: null, refresh: async () => {}, recovery: false });
 const base = (id: string) => `/organiser/events/${encodeURIComponent(id)}`;
 const reason = (error: unknown) => error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Something went wrong. Please retry.";
 
-function Button({ title, onPress, disabled = false }: { title: string; onPress: () => void; disabled?: boolean }) {
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.button, disabled && styles.disabled]}><Text style={styles.buttonText}>{title}</Text></Pressable>;
+function Button({ title, onPress, disabled = false, secondary = false, textStyle, style }: { title: string; onPress: () => void; disabled?: boolean; secondary?: boolean; textStyle?: StyleProp<TextStyle>; style?: StyleProp<ViewStyle> }) {
+  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.button, secondary && styles.secondaryButton, style, disabled && styles.disabled]}><Text style={[styles.buttonText, secondary && styles.secondaryButtonText, textStyle]}>{title}</Text></Pressable>;
 }
 function Nav({ label, to, selected = false }: { label: string; to: string; selected?: boolean }) {
   const router = useRouter();
   return <Pressable accessibilityRole="link" accessibilityState={{ selected }} onPress={() => router.push(to as Href)} style={[styles.nav, selected && styles.selected]}><Text style={styles.navText}>{label}</Text></Pressable>;
 }
-function Field({ label, value, onChangeText, password = false, numeric = false, labelStyle, disabled = false }: { label: string; value: string; onChangeText: (text: string) => void; password?: boolean; numeric?: boolean; labelStyle?: StyleProp<TextStyle>; disabled?: boolean }) {
-  return <View style={styles.field}><Text style={[styles.label, labelStyle]}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={!disabled} secureTextEntry={password} autoCapitalize="none" inputMode={numeric ? "decimal" : "text"} style={styles.input} /></View>;
+function Field({ label, value, onChangeText, password = false, numeric = false, labelStyle, inputStyle, disabled = false }: { label: string; value: string; onChangeText: (text: string) => void; password?: boolean; numeric?: boolean; labelStyle?: StyleProp<TextStyle>; inputStyle?: StyleProp<TextStyle>; disabled?: boolean }) {
+  return <View style={styles.field}><Text style={[styles.label, labelStyle]}>{label}</Text><TextInput accessibilityLabel={label} value={value} onChangeText={onChangeText} editable={!disabled} secureTextEntry={password} autoCapitalize="none" inputMode={numeric ? "decimal" : "text"} style={[styles.input, inputStyle]} /></View>;
 }
 function Panel({ title, children, flushTop = false, compactTop = false, topPadding }: { title?: string; children: React.ReactNode; flushTop?: boolean; compactTop?: boolean; topPadding?: number }) {
   return <View style={[styles.panel, flushTop && styles.panelFlushTop, compactTop && styles.panelCompactTop, topPadding !== undefined && { paddingTop: topPadding }]}>{title && <Text style={styles.heading}>{title}</Text>}{children}</View>;
 }
-function Feedback({ text }: { text: string }) { return text ? <Text accessibilityRole="alert" style={styles.feedback}>{text}</Text> : null; }
+function Feedback({ text, textStyle }: { text: string; textStyle?: StyleProp<TextStyle> }) { return text ? <Text accessibilityRole="alert" style={[styles.feedback, textStyle]}>{text}</Text> : null; }
 
 export function PortalLayout() {
   const { width } = useWindowDimensions();
-  const { eventId } = useLocalSearchParams<{ eventId?: string }>();
+  const { eventId } = useGlobalSearchParams<{ eventId?: string }>();
   const [fontsLoaded] = useFonts({ RobotoSlab_800ExtraBold });
   const characterWidth = Math.min(100, Math.max(64, width * 0.2)) * 0.7;
   const pathname = usePathname();
@@ -85,9 +91,9 @@ export function PortalLayout() {
   return <Context.Provider value={{ dashboard, refresh, recovery }}><ScrollView style={styles.background} keyboardShouldPersistTaps="handled">
     <View style={styles.banner}><View style={styles.bannerInner}>
       {dashboard && <Pressable accessibilityRole="button" accessibilityLabel="Sign out" onPress={() => { void signOutOrganiser().then(() => { setDashboard(null); router.replace('/organiser/sign-in' as Href); }).catch(e => setError(reason(e))); }} style={({ pressed }) => [styles.iconButton, styles.logout, pressed && styles.logoutPressed]}>
-        <Image accessible={false} source={require('../../assets/images/POKER-TRAIL-icon-exit.png')} resizeMode="contain" style={styles.logoutIcon} />
+        <Image accessible={false} source={require('../../../assets/images/POKER-TRAIL-icon-exit.png')} resizeMode="contain" style={styles.logoutIcon} />
       </Pressable>}
-      <Image accessible={false} source={require('../../assets/images/POKER-TRAIL-character.png')} resizeMode="contain" style={{ width: characterWidth, height: characterWidth * characterAspectRatio }} />
+      <Image accessible={false} source={require('../../../assets/images/POKER-TRAIL-character.png')} resizeMode="contain" style={{ width: characterWidth, height: characterWidth * characterAspectRatio }} />
       {dashboard && headerTitle && <Text style={[styles.bannerEventName, { fontSize: getOrganiserHeadingSize(width) * 1.25 }, fontsLoaded && { fontFamily: LANDING_BUTTON_FONT }]}>{headerTitle}</Text>}
     </View></View>
     <View style={styles.page}>
@@ -156,49 +162,84 @@ export function DashboardPage() {
 
 export function NewEventPage() {
   const { width } = useWindowDimensions();
-  const [fontsLoaded] = useFonts({ RobotoSlab_800ExtraBold });
+  const [fontsLoaded] = useFonts({ RobotoSlab_400Regular, RobotoSlab_600SemiBold, RobotoSlab_700Bold, RobotoSlab_800ExtraBold });
+  const bodyFontStyle: TextStyle | undefined = fontsLoaded ? { fontFamily: 'RobotoSlab_400Regular', fontWeight: '400' } : undefined;
+  const boldFontStyle: TextStyle | undefined = fontsLoaded ? { fontFamily: 'RobotoSlab_700Bold', fontWeight: '400' } : undefined;
+  const semiBoldFontStyle: TextStyle | undefined = fontsLoaded ? { fontFamily: 'RobotoSlab_600SemiBold', fontWeight: '400' } : undefined;
   const labelSize = 60 * Math.min(Math.max(1, width - 96), 360) / 1241;
   const fieldLabelStyle: TextStyle = { color: TRAIL_INK, fontWeight: '400', fontSize: labelSize, lineHeight: labelSize * 1.4, ...(fontsLoaded && { fontFamily: LANDING_BUTTON_FONT }) };
   const [name, setName] = useState(''); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   const [drafts, setDrafts] = useState<WaypointDraft[]>(() => Array.from({ length: 5 }, emptyWaypointDraft));
   const [index, setIndex] = useState(0);
+  const [capacity, setCapacity] = useState(25);
+  const [tiers, setTiers] = useState<CapacityTier[]>([]);
+  useEffect(() => { void loadCapacityTiers().then(setTiers).catch(e => setError(reason(e))); }, []);
   const inFlight = useRef(false);
   const createdEvent = useRef<OrganiserEvent | null>(null);
   const points = drafts.map((draft, slot) => parseWaypointDraft(draft, slot)).filter(point => point !== null);
   const ready = !!name.trim() && points.length === 5;
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const previews = points.map(point => ({ ...point, sortOrder: point.slotIndex, name: `Waypoint ${point.slotIndex + 1}` }));
   const { refresh } = useContext(Context); const router = useRouter();
-  async function create() {
-    if (inFlight.current || (!createdEvent.current && !ready)) return;
-    inFlight.current = true;
-    setBusy(true); setError('');
+  async function create(intent: 'draft' | 'publish') {
+    if (inFlight.current || (!createdEvent.current && (!name.trim() || (intent === 'publish' && !ready)))) return;
+    inFlight.current = true; setBusy(true); setSavingDraft(intent === 'draft'); setError('');
     try {
-      if (!createdEvent.current) createdEvent.current = await createOrganiserEventWithWaypoints({ name, waypoints: points });
-      await refresh(); router.replace(base(createdEvent.current.id) as Href);
-    }
-    catch (e) { setError(reason(e)); } finally { setBusy(false); inFlight.current = false; }
+      if (!createdEvent.current) createdEvent.current = await createOrganiserDraft({ name, waypoints: points, capacity });
+      const event = createdEvent.current;
+      if (intent === 'publish' && capacity <= 25 && event.status !== 'active') {
+        await publishOrganiserEvent(event.id); event.status = 'active';
+      }
+      await refresh();
+      if (intent === 'publish' && capacity > 25) await openEventCheckout(event.id, capacity);
+      else router.replace((base(event.id) + (intent === 'draft' && points.length < 5 ? '/waypoints?slot=' + (([0,1,2,3,4].find(slot => !points.some(p => p.slotIndex === slot)) ?? 0) + 1) : '')) as Href);
+    } catch (e) { setError(createdEvent.current ? (createdEvent.current.status === 'active' ? 'Your event is published. ' : 'Your draft is saved. ') + reason(e) : reason(e)); }
+    finally { setBusy(false); inFlight.current = false; }
   }
   const locked = busy || !!createdEvent.current;
+  const availableTiers = tiers.length ? tiers : [{ capacity: 25, amount_cents: 0, currency: 'aud' }];
+  const selectedTier = availableTiers.find(tier => tier.capacity === capacity)!;
   return <Panel>
-    <Field label="Event name" value={name} onChangeText={setName} disabled={locked} labelStyle={fieldLabelStyle} />
+    <View style={styles.creationHeader}>
+      <View style={styles.creationNameField}><Field label="Event name" value={name} onChangeText={setName} disabled={locked} labelStyle={fieldLabelStyle} inputStyle={bodyFontStyle} /></View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Cancel event creation" disabled={busy} onPress={() => setConfirmCancel(true)} style={({ pressed }) => [styles.editNameButton, busy && styles.disabled, pressed && styles.logoutPressed]}>
+        <Feather name="x" size={24} color={TRAIL_INK} accessible={false} />
+      </Pressable>
+    </View>
+    <Modal visible={confirmCancel} transparent animationType="fade" onRequestClose={() => setConfirmCancel(false)}>
+      <View style={styles.modalBackdrop}>
+        <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
+          <View accessibilityViewIsModal role="alertdialog" aria-modal={true} aria-labelledby="cancel-event-title" aria-describedby="cancel-event-description" style={styles.nameDialog}>
+            <Text nativeID="cancel-event-title" accessibilityRole="header" style={[styles.heading, boldFontStyle]}>Leave event creation?</Text>
+            <Text nativeID="cancel-event-description" style={[styles.copy, bodyFontStyle]}>{createdEvent.current ? createdEvent.current.status === 'active' ? 'Your published event will remain available in Your Events.' : 'Your saved draft will remain available in Your Events.' : 'Your unsaved event details and waypoints will be discarded.'}</Text>
+            <View style={styles.row}>
+              <Button textStyle={boldFontStyle} secondary title="Keep editing" onPress={() => setConfirmCancel(false)} />
+              <Button textStyle={boldFontStyle} title="Leave" onPress={() => { setConfirmCancel(false); router.replace('/organiser' as Href); }} />
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+    <View style={[styles.field, styles.capacityField]}>
+      <Text nativeID="event-size-label" style={[styles.label, fieldLabelStyle]}>Event size</Text>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Event size" style={styles.capacityOptions}>
+        {availableTiers.map(tier => <Pressable key={tier.capacity} testID={'event-capacity-' + tier.capacity} accessibilityRole="radio" aria-checked={capacity === tier.capacity} accessibilityLabel={'Up to ' + tier.capacity + ' players · ' + (tier.amount_cents ? money(tier.amount_cents) : 'Free')} accessibilityState={{ checked: capacity === tier.capacity, disabled: locked }} disabled={locked} onPress={() => setCapacity(tier.capacity)} style={[styles.capacityOption, capacity === tier.capacity && styles.capacityOptionSelected, locked && styles.disabled]}>
+          <View style={styles.capacityOptionHeading}><Text style={[styles.capacityCount, semiBoldFontStyle]}>Up to {tier.capacity} players</Text><Feather name={capacity === tier.capacity ? 'check-circle' : 'circle'} size={18} color="#256444" accessible={false} /></View>
+          <Text style={[styles.capacityPrice, boldFontStyle]}>{tier.amount_cents ? money(tier.amount_cents) : 'Free'}</Text>
+        </Pressable>)}
+      </View>
+    </View>
     <View style={[styles.row, styles.waypointHeadingRow]}>
       <Text accessibilityRole="header" style={[styles.label, fieldLabelStyle]}>Waypoints</Text>
-      <Text accessibilityLiveRegion="polite" style={styles.copy}>{points.length} / 5 set</Text>
+      <Text accessibilityLiveRegion="polite" style={[styles.copy, bodyFontStyle]}>{points.length} / 5 set</Text>
     </View>
-    <OrganiserWaypointEditor draft={drafts[index]} selectedSlotIndex={index} waypoints={previews} disabled={locked} autoPickUserLocation={false} onSelect={setIndex} onChange={draft => setDrafts(previous => previous.map((value, slot) => slot === index ? draft : value))} />
-    <View style={styles.field}>
-      <Text nativeID="event-size-label" style={[styles.label, fieldLabelStyle]}>Event size</Text>
-      <select aria-labelledby="event-size-label" defaultValue="25" disabled={locked} style={{ width: '100%', minWidth: 0, minHeight: 48, boxSizing: 'border-box', border: '1px solid #a2b6a5', borderRadius: 8, padding: 12, color: '#153c2a', fontSize: 12.8, fontFamily: 'inherit', backgroundColor: '#fff', opacity: locked ? 0.45 : 1 }}>
-        <option value="25">Up to 25 players · Free</option>
-        <option value="50" disabled>Up to 50 players · Coming soon</option>
-        <option value="100" disabled>Up to 100 players · Coming soon</option>
-        <option value="250" disabled>Up to 250 players · Coming soon</option>
-      </select>
-    </View>
-    <Feedback text={error} />
+    <OrganiserWaypointEditor labelTextStyle={bodyFontStyle} inputTextStyle={bodyFontStyle} draft={drafts[index]} selectedSlotIndex={index} waypoints={previews} disabled={locked} autoPickUserLocation={false} onSelect={setIndex} onChange={draft => setDrafts(previous => previous.map((value, slot) => slot === index ? draft : value))} />
+    <Feedback textStyle={bodyFontStyle} text={error} />
     <View style={styles.row}>
-      <Button title={busy ? 'Creating…' : createdEvent.current ? 'Open event' : 'Create event'} disabled={busy || (!ready && !createdEvent.current)} onPress={() => void create()} />
-      <Button title="Cancel" disabled={busy} onPress={() => router.push('/organiser' as Href)} />
+      <Button textStyle={[styles.creationActionText, boldFontStyle]} title={busy && !savingDraft ? 'Please wait…' : capacity > 25 ? 'Pay & publish' : 'Publish event'} disabled={busy || !ready} onPress={() => void create('publish')} />
+      <Button style={styles.draftButton} textStyle={[styles.creationActionText, boldFontStyle, styles.draftButtonText]} secondary title={busy && savingDraft ? 'Saving draft…' : 'Save as draft'} disabled={busy || createdEvent.current?.status === 'active' || (!name.trim() && !createdEvent.current)} onPress={() => void create('draft')} />
+      <View accessibilityLiveRegion="polite" style={styles.capacitySummary}><Text style={[styles.capacitySummaryPrice, boldFontStyle]}>Up to {capacity} players · {selectedTier.amount_cents ? money(selectedTier.amount_cents) : 'Free'}</Text><Text style={[styles.copy, bodyFontStyle]}>Events last 30 days from first publication.</Text></View>
     </View>
   </Panel>;
 }
@@ -262,11 +303,14 @@ function EventFrame({ event, children }: { event?: OrganiserEvent; children: Rea
         <Feather name="arrow-left" size={22} color={TRAIL_INK} accessible={false} />
       </Pressable>
       <View style={styles.eventNameGroup}>
-      {event.status === 'active' && <View style={styles.eventCodeHeader}>
-        <View style={styles.eventCodeBlock} onLayout={e => setCodeBlockWidth(e.nativeEvent.layout.width)}><Text selectable style={styles.code}>{event.eventCode}</Text><Text style={[styles.centeredCopy, { color: TRAIL_INK, fontSize: detailSize, lineHeight: detailSize * 1.4 }, fontsLoaded && { fontFamily: LANDING_INPUT_FONT }]}>Enter this code in Poker Trail to join</Text></View>
+      {(event.status === 'draft' || (event.status === 'active' && !eventExpired(event))) && <View style={styles.eventCodeHeader}>
+        <View style={styles.eventCodeBlock} onLayout={e => setCodeBlockWidth(e.nativeEvent.layout.width)}>
+          <Text selectable={event.status !== 'draft'} accessibilityLabel={event.status === 'draft' ? 'Event code available after publishing' : undefined} style={styles.code}>{event.status === 'draft' ? '------' : event.eventCode}</Text>
+          <Text style={[styles.centeredCopy, { color: TRAIL_INK, fontSize: detailSize, lineHeight: detailSize * 1.4 }, fontsLoaded && { fontFamily: LANDING_INPUT_FONT }]}>{event.status === 'draft' ? 'finish setup and publish to join event' : `Enter this code in Poker Trail to join${event.expiresAt ? ` · Playable until ${new Date(event.expiresAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`}</Text>
+        </View>
       </View>}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Edit event settings" accessibilityState={{ expanded: editingName }} onPress={() => { setName(event.name); setNameError(''); setDeleteError(''); setConfirmDelete(false); setConfirmClose(false); setEditingName(true); }} style={({ pressed }) => [styles.editNameButton, pressed && styles.logoutPressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Edit event settings" disabled={eventExpired(event)} accessibilityState={{ expanded: editingName }} onPress={() => { setName(event.name); setNameError(''); setDeleteError(''); setConfirmDelete(false); setConfirmClose(false); setEditingName(true); }} style={({ pressed }) => [styles.editNameButton, pressed && styles.logoutPressed]}>
         <Feather name="more-vertical" size={22} color={TRAIL_INK} accessible={false} />
       </Pressable>
     </View>
@@ -305,28 +349,31 @@ function EventFrame({ event, children }: { event?: OrganiserEvent; children: Rea
         </ScrollView>
       </View>
     </Modal>
-    <View style={styles.eventTabFrame}><View style={styles.eventTabBar}>
-      {[['Waypoints', '/waypoints'], ['Leaderboard', '']].map(([label, suffix]) => {
-        const selected = pathname === base(event.id) + suffix;
+    {event.status !== 'draft' && <View style={styles.eventTabFrame}><View style={styles.eventTabBar}>
+      {[['Setup', ''], ['Leaderboard', '/leaderboard']].map(([label, suffix]) => {
+        const selected = pathname === base(event.id) + suffix || (suffix === '' && ['/waypoints', '/billing'].some(path => pathname === base(event.id) + path));
         return <Pressable key={label} accessibilityRole="tab" accessibilityLabel={label} accessibilityState={{ selected }} onPress={() => router.push((base(event.id) + suffix) as Href)} style={({ pressed }) => [styles.eventTab, { backgroundColor: selected ? APP_BACKGROUND_COLOR : TRAIL_WHITE }, pressed && styles.logoutPressed]}>
           <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.eventTabLabel, fontsLoaded && { fontFamily: LANDING_BUTTON_FONT }, { fontSize, color: selected ? TRAIL_WHITE : TRAIL_INK }]}>{label.toUpperCase()}</Text>
         </Pressable>;
       })}
-    </View></View>{children}</View>;
+    </View></View>}{children}</View>;
 }
 const validWaypoint = (w: OrganiserWaypoint) => w.isActive && w.sortOrder >= 0 && w.sortOrder < 5 && Math.abs(w.latitude) <= 90 && Math.abs(w.longitude) <= 180 && w.proofType === 'gps';
 
 export function OverviewPage() {
+  const router = useRouter();
   const { event, waypoints, refresh } = useEvent(); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
   const count = waypoints.filter(validWaypoint).length;
   async function publish() {
     if (!event) return; setBusy(true); setMessage('');
-    try { await publishOrganiserEvent(event.id); await refresh(); setMessage('Event published. Share the event code with your players.'); }
+    try { if (event.requestedCapacity && event.playerCapacity !== null && event.requestedCapacity > event.playerCapacity) { router.push((base(event.id) + '/billing?target=' + event.requestedCapacity) as Href); return; } await publishOrganiserEvent(event.id); await refresh(); setMessage('Event published. Share the event code with your players.'); }
     catch (e) { setMessage(reason(e)); } finally { setBusy(false); }
   }
   return <EventFrame event={event}>{event && <>
     <Panel flushTop compactTop>
-      {event.status === 'active' ? null : event.status === 'draft' || event.status === 'closed' ? <><Text style={styles.copy}>{event.playerCapacity ? `Free capacity: ${event.playerCapacity} players. No payment required.` : 'Existing event capacity is preserved.'}</Text><Button title={busy ? 'Please wait…' : 'Publish event'} disabled={busy || count !== 5} onPress={() => void publish()} /></> : <Text style={styles.copy}>This event is archived.</Text>}
+      {eventExpired(event) ? <><Text style={styles.copy}>This event has expired. Results remain available.</Text><Nav label="Create new event" to="/organiser/events/new" /></> : event.status === 'active' ? null : event.status === 'draft' || event.status === 'closed' ? <><Text style={styles.copy}>{event.playerCapacity ? `Current capacity: ${event.playerCapacity} players.` : 'Existing event capacity is preserved.'}</Text><Button title={busy ? 'Please wait…' : event.requestedCapacity && event.playerCapacity !== null && event.requestedCapacity > event.playerCapacity ? 'Pay & publish' : 'Publish event'} disabled={busy || count !== 5} onPress={() => void publish()} /></> : <Text style={styles.copy}>This event is archived.</Text>}
+      <Text style={styles.copy}>{event.expiresAt ? "Playable until " + new Date(event.expiresAt).toLocaleString() : event.lifecycleManaged ? "Publishing starts your 30-day event window." : "Existing event lifetime is preserved."}</Text>
+      {count !== 5 && <Nav label="Finish setting up waypoints" to={base(event.id) + "/waypoints"} />}
       <Feedback text={message} />
       <OrganiserLeaderboard key={event.id} eventId={event.id} />
     </Panel>
@@ -334,8 +381,7 @@ export function OverviewPage() {
 }
 
 export function BillingPage() {
-  const { event, dashboard } = useEvent();
-  return <EventFrame event={event}>{event && <Panel title="Event capacity & billing"><Text style={styles.heading}>{event.playerCapacity ? `Free · ${event.playerCapacity} players` : 'Existing event · Unlimited capacity'}</Text><Text style={styles.copy}>{dashboard?.summaries[event.id]?.playerCount ?? 0} players registered. No payment is required for the free tier.</Text><Text style={styles.copy}>Larger event tiers and paid upgrades are not available yet. Your current capacity is enforced when new players register; existing players can continue playing.</Text><Nav label="Back to overview" to={base(event.id)} /></Panel>}</EventFrame>;
+  return <WaypointsPage />;
 }
 
 export function WaypointsPage() {
@@ -360,18 +406,38 @@ export function WaypointsPage() {
       await refresh(); setMessage('Waypoint saved.');
     } catch (e) { setMessage(reason(e)); } finally { setBusy(false); }
   }
-  return <EventFrame event={event}>{event && <Panel flushTop topPadding={15}>
-    <OrganiserWaypointEditor draft={draft} selectedSlotIndex={index} waypoints={waypoints} disabled={busy} onChange={setDraft} onSelect={value => router.replace((base(event.id) + '/waypoints?slot=' + (value + 1)) as Href)}>
+  return <EventFrame event={event}>{event && <><Panel title="Waypoints" flushTop topPadding={15}>
+    <Text style={styles.copy}>Set up the five locations players will visit on your trail. Select a numbered waypoint, choose its location on the map or enter coordinates, then set the radius players must be within to check in. Save each waypoint before switching to the next.</Text>
+    {eventExpired(event) && <Text style={styles.copy}>This event has expired. Waypoints are read-only.</Text>}
+    <OrganiserWaypointEditor draft={draft} selectedSlotIndex={index} waypoints={waypoints} disabled={busy || eventExpired(event)} onChange={setDraft} onSelect={value => router.replace((base(event.id) + '/waypoints?slot=' + (value + 1)) as Href)}>
       <Feedback text={message} />
-      <Button title={busy ? 'Saving…' : 'Save waypoint'} disabled={busy || !point} onPress={() => void save()} />
+      <Button title={busy ? 'Saving…' : 'Save waypoint'} disabled={busy || !point || eventExpired(event)} onPress={() => void save()} />
     </OrganiserWaypointEditor>
-  </Panel>}</EventFrame>;
+  </Panel>
+    <Panel title="Capacity & billing"><EventBillingPanel event={event} refresh={refresh} routeReady={waypoints.filter(validWaypoint).length === 5} /></Panel>
+  </>}</EventFrame>;
 }
 
 // Preserve the source PNG's 1312 × 1199 proportions on web and native.
 const characterAspectRatio = 1199 / 1312;
 
 const styles = StyleSheet.create({
+  creationHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  creationNameField: { flex: 1, minWidth: 0 },
+  creationActionText: { fontSize: 14 },
+  draftButton: { borderColor: '#000000' },
+  draftButtonText: { color: '#000000' },
+  secondaryButton: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#256444' },
+  secondaryButtonText: { color: '#256444' },
+  capacityField: { maxWidth: '100%' },
+  capacityOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  capacityOption: { flexBasis: 180, flexGrow: 1, minWidth: 0, padding: 16, gap: 8, borderWidth: 2, borderColor: '#a2b6a5', borderRadius: 10, backgroundColor: '#fff' },
+  capacityOptionSelected: { borderColor: '#256444', backgroundColor: '#e4efe1' },
+  capacityOptionHeading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  capacityCount: { flex: 1, color: '#153c2a', fontSize: 14, fontWeight: '600' },
+  capacityPrice: { color: '#153c2a', fontSize: 22, fontWeight: '700' },
+  capacitySummary: { gap: 4, flexShrink: 1 },
+  capacitySummaryPrice: { color: '#153c2a', fontSize: 14, fontWeight: '700' },
   background: { flex: 1, backgroundColor: APP_BACKGROUND_COLOR }, page: { paddingHorizontal: 24, paddingBottom: 24, gap: 20, width: '100%', maxWidth: 1120, alignSelf: 'center' },
   banner: { backgroundColor: APP_BACKGROUND_COLOR, width: '100%' },
   bannerInner: { position: 'relative', width: '100%', maxWidth: 1120, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', paddingTop: 16, paddingBottom: 8, paddingLeft: 24, paddingRight: 88, minHeight: 80, gap: 12 },
@@ -399,7 +465,7 @@ const styles = StyleSheet.create({
   panel: { padding: 24, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#dce4d8', gap: 16 },
   panelFlushTop: { borderRadius: 0, borderWidth: 0 },
   panelCompactTop: { paddingTop: 8 },
-  eventCodeBlock: { alignItems: 'center', gap: 0, width: '100%' },
+  eventCodeBlock: { alignItems: 'center', gap: 12, width: '100%', paddingTop: 20, paddingHorizontal: 12 },
   eventCodeHeader: { width: '100%', paddingHorizontal: 8 },
   centeredCopy: { textAlign: 'center' },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }, copy: { color: '#4c5c50', fontSize: 12, lineHeight: 18.4 },

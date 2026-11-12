@@ -1,1 +1,1 @@
-export { OverviewPage as default } from "../../../../src/components/OrganiserPortal";
+export { WaypointsPage as default } from "../../../../src/components/organiser/OrganiserPortal";

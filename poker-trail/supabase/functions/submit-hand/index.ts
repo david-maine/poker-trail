@@ -66,6 +66,7 @@ type EventRow = {
   status: "draft" | "active" | "closed" | "archived";
   starts_at: string | null;
   ends_at: string | null;
+  expires_at?: string | null;
 };
 
 type ParsedCard = {
@@ -346,6 +347,8 @@ function validateEventTiming(event: EventRow, claims: SubmittedClaim[]) {
     return "This event is not currently accepting hand submissions.";
   }
 
+  if (event.expires_at && Date.parse(event.expires_at) <= Date.now()) return "This event has expired.";
+
   for (const claim of claims) {
     const claimedAtMs = Date.parse(claim.claimedAt!);
 
@@ -402,7 +405,7 @@ function decodeBase64Url(value: string) {
 async function fetchEvent(client: ReturnType<typeof createClient>, eventId: string) {
   const { data, error } = await client
     .from("events")
-    .select("id, slug, name, status, starts_at, ends_at")
+    .select("id, slug, name, status, starts_at, ends_at, expires_at")
     .eq("id", eventId)
     .maybeSingle();
 

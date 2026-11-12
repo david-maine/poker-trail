@@ -1,1 +1,1 @@
-export { BillingPage as default } from "../../../../src/components/OrganiserPortal";
+export { BillingPage as default } from "../../../../src/components/organiser/OrganiserPortal";

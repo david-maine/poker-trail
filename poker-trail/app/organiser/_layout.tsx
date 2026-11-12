@@ -1,1 +1,1 @@
-export { PortalLayout as default } from "../../src/components/OrganiserPortal";
+export { PortalLayout as default } from "../../src/components/organiser/OrganiserPortal";

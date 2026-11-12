@@ -1,12 +1,14 @@
+import type { StyleProp, TextStyle } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { WaypointMapPoint, WaypointMapWaypoint } from "./OrganiserWaypointMap";
 
-import { loadGoogleMaps, mapsApiKey } from "../lib/googleMaps.web";
-import type { GoogleMapsApi, GoogleCircle, GoogleMap, GoogleMarker, GoogleWindow, GoogleLatLng, GooglePoint } from "../lib/googleMaps.web";
+import { loadGoogleMaps, mapsApiKey } from "../../lib/googleMaps.web";
+import type { GoogleMapsApi, GoogleCircle, GoogleMap, GoogleMarker, GoogleWindow, GoogleLatLng, GooglePoint } from "../../lib/googleMaps.web";
 
 type Props = {
+  textStyle?: StyleProp<TextStyle>;
   currentPoint: WaypointMapPoint | null;
   radiusMeters: number;
   selectedSlotIndex: number;
@@ -16,6 +18,7 @@ type Props = {
 };
 
 export default function OrganiserWaypointMap({
+  textStyle,
   currentPoint,
   radiusMeters,
   selectedSlotIndex,
@@ -356,7 +359,7 @@ export default function OrganiserWaypointMap({
 
   if (!mapsApiKey) {
     return (
-      <MapMessage
+      <MapMessage textStyle={textStyle}
         title="Map key missing"
         text="Set EXPO_PUBLIC_GOOGLE_MAPS_WEB_API_KEY to use the map picker. You can still enter coordinates manually."
       />
@@ -364,7 +367,7 @@ export default function OrganiserWaypointMap({
   }
 
   if (loadError) {
-    return <MapMessage title="Map unavailable" text={loadError} />;
+    return <MapMessage textStyle={textStyle} title="Map unavailable" text={loadError} />;
   }
 
   return (
@@ -377,7 +380,7 @@ export default function OrganiserWaypointMap({
       />
       {!mapsApi ? (
         <View pointerEvents="none" style={styles.loadingOverlay}>
-          <Text style={styles.loadingText}>Loading map...</Text>
+          <Text style={[styles.loadingText, textStyle]}>Loading map...</Text>
         </View>
       ) : null}
       {mapsApi ? (
@@ -387,22 +390,22 @@ export default function OrganiserWaypointMap({
             onPress={requestUserLocation}
             style={[styles.locationButton, isLocating ? styles.locationButtonDisabled : null]}
           >
-            <Text style={styles.locationButtonText}>
+            <Text style={[styles.locationButtonText, textStyle]}>
               {isLocating ? "Locating..." : "Use my location"}
             </Text>
           </Pressable>
-          {locationMessage ? <Text style={styles.locationMessage}>{locationMessage}</Text> : null}
+          {locationMessage ? <Text style={[styles.locationMessage, textStyle]}>{locationMessage}</Text> : null}
         </View>
       ) : null}
     </View>
   );
 }
 
-function MapMessage({ text, title }: { text: string; title: string }) {
+function MapMessage({ text, title, textStyle }: { text: string; title: string; textStyle?: StyleProp<TextStyle> }) {
   return (
     <View style={styles.messagePanel}>
-      <Text style={styles.messageTitle}>{title}</Text>
-      <Text style={styles.messageText}>{text}</Text>
+      <Text style={[styles.messageTitle, textStyle]}>{title}</Text>
+      <Text style={[styles.messageText, textStyle]}>{text}</Text>
     </View>
   );
 }
@@ -491,10 +494,10 @@ const styles = StyleSheet.create({
   },
   locationControl: {
     gap: 6,
-    left: 12,
+    left: 10,
     maxWidth: 280,
     position: "absolute",
-    top: 12,
+    top: 10,
   },
   locationMessage: {
     backgroundColor: "#fff7ed",

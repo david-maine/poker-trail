@@ -1,1 +1,1 @@
-export { NewEventPage as default } from "../../../src/components/OrganiserPortal";
+export { NewEventPage as default } from "../../../src/components/organiser/OrganiserPortal";

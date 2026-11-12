@@ -16,8 +16,8 @@ function renderMap(currentPoint, selectedSlotIndex=0) {
  const component=loader({
   react:{useState:()=>[states[cursor++],()=>{}],useRef:value=>{const i=refCursor++;return refs[i]??(refs[i]={current:value});},useMemo:fn=>fn(),useCallback:fn=>fn,useEffect:fn=>effects.push(fn)},
   'react-native':{View:'View',Text:'Text',Pressable:'Pressable',StyleSheet:{create:s=>s}},
-  '../lib/googleMaps.web':{mapsApiKey:'test-key',loadGoogleMaps:async()=>api},
- })('src/components/OrganiserWaypointMap.web.tsx').default;
+  '../../lib/googleMaps.web':{mapsApiKey:'test-key',loadGoogleMaps:async()=>api},
+ })('src/components/organiser/OrganiserWaypointMap.web.tsx').default;
  const props={currentPoint,radiusMeters:45,selectedSlotIndex,onPick(){},waypoints:[
   {sortOrder:0,name:'First',latitude:-34,longitude:115,radiusMeters:20},
   {sortOrder:1,name:'Second',latitude:-35,longitude:116,radiusMeters:30},

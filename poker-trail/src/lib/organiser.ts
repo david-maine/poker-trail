@@ -1,7 +1,7 @@
 import { Session } from "@supabase/supabase-js";
 
 import { organiserSupabase as supabase } from "./organiserSupabase";
-import { validateWaypointSet } from './organiserWaypointDraft';
+import { parseWaypointDraft, validateWaypointSet } from './organiserWaypointDraft';
 import type { WaypointSetup } from './organiserWaypointDraft';
 
 export type OrganiserEventStatus = "draft" | "active" | "closed" | "archived";
@@ -21,9 +21,13 @@ type OrganiserEventRow = {
   name: string;
   description: string | null;
   player_capacity: number | null;
+  requested_capacity: number | null;
   status: OrganiserEventStatus;
   starts_at: string | null;
   ends_at: string | null;
+  first_published_at: string | null;
+  expires_at: string | null;
+  lifecycle_managed: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -63,11 +67,15 @@ export type OrganiserEvent = {
   slug: string;
   eventCode: string;
   playerCapacity: number | null;
+  requestedCapacity: number | null;
   name: string;
   description: string | null;
   status: OrganiserEventStatus;
   startsAt: string | null;
   endsAt: string | null;
+  firstPublishedAt: string | null;
+  expiresAt: string | null;
+  lifecycleManaged: boolean;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
@@ -148,7 +156,7 @@ export type OrganiserWaypointInput = {
 };
 
 const eventSelect =
-  "id, slug, event_code, name, description, player_capacity, status, starts_at, ends_at, created_by, created_at, updated_at";
+  "id, slug, event_code, name, description, player_capacity, requested_capacity, status, starts_at, ends_at, first_published_at, expires_at, lifecycle_managed, created_by, created_at, updated_at";
 
 const waypointSelect =
   "id, event_id, code, name, latitude, longitude, radius_meters, sort_order, proof_type, proof_value, is_active, created_at, updated_at";
@@ -520,9 +528,13 @@ function mapEventRow(row: OrganiserEventRow): OrganiserEvent {
     name: row.name,
     description: row.description,
     playerCapacity: row.player_capacity,
+    requestedCapacity: row.requested_capacity,
     status: row.status,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
+    firstPublishedAt: row.first_published_at,
+    expiresAt: row.expires_at,
+    lifecycleManaged: row.lifecycle_managed,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -625,5 +637,24 @@ export async function requestOrganiserPasswordReset(email: string) {
 
 export async function updateOrganiserPassword(password: string) {
   const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+export async function createOrganiserDraft(input: { name: string; waypoints: WaypointSetup[]; capacity: number }): Promise<OrganiserEvent> {
+  const name = normalizeRequiredText(input.name, 'Event name');
+  if (input.waypoints.length > 5 || new Set(input.waypoints.map(p => p.slotIndex)).size !== input.waypoints.length || input.waypoints.some(p => !Number.isInteger(p.slotIndex) || p.slotIndex < 0 || p.slotIndex > 4 || !parseWaypointDraft({ latitude: String(p.latitude), longitude: String(p.longitude), radius: String(p.radiusMeters) }, p.slotIndex))) throw new Error('Completed waypoints must have valid coordinates and radius.');
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to create organiser events.');
+  const { data, error } = await supabase.rpc('create_organiser_event_draft', {
+    p_name: name, p_capacity: input.capacity,
+    p_waypoints: input.waypoints.map(p => ({ slot_index: p.slotIndex, latitude: p.latitude, longitude: p.longitude, radius_meters: p.radiusMeters })),
+  });
+  if (error) throw error;
+  return mapEventRow(data as OrganiserEventRow);
+}
+export async function setRequestedEventCapacity(eventId: string, capacity: number): Promise<void> {
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to change event size.');
+  const { error } = await supabase.from('events').update({ requested_capacity: capacity }).eq('id', eventId).eq('created_by', session.user.id).eq('status', 'draft').select('id').single();
   if (error) throw error;
 }
