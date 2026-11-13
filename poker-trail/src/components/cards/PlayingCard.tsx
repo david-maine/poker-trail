@@ -1,3 +1,4 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../lib/typography";
 import { CARD_IMAGES } from "../../lib/cardImages";
 import CardImage from "./CardImage";
 import React, { useState } from "react";
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
   },
   fallbackText: {
     color: "#1d223e",
-    fontSize: 12,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.caption),
+    ...FONT_WEIGHT.bold,
   },
 });

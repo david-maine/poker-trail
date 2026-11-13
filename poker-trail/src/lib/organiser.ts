@@ -22,6 +22,7 @@ type OrganiserEventRow = {
   description: string | null;
   player_capacity: number | null;
   requested_capacity: number | null;
+  registrations_paused: boolean;
   status: OrganiserEventStatus;
   starts_at: string | null;
   ends_at: string | null;
@@ -68,6 +69,7 @@ export type OrganiserEvent = {
   eventCode: string;
   playerCapacity: number | null;
   requestedCapacity: number | null;
+  registrationsPaused: boolean;
   name: string;
   description: string | null;
   status: OrganiserEventStatus;
@@ -156,7 +158,7 @@ export type OrganiserWaypointInput = {
 };
 
 const eventSelect =
-  "id, slug, event_code, name, description, player_capacity, requested_capacity, status, starts_at, ends_at, first_published_at, expires_at, lifecycle_managed, created_by, created_at, updated_at";
+  "id, slug, event_code, name, description, player_capacity, requested_capacity, registrations_paused, status, starts_at, ends_at, first_published_at, expires_at, lifecycle_managed, created_by, created_at, updated_at";
 
 const waypointSelect =
   "id, event_id, code, name, latitude, longitude, radius_meters, sort_order, proof_type, proof_value, is_active, created_at, updated_at";
@@ -529,6 +531,7 @@ function mapEventRow(row: OrganiserEventRow): OrganiserEvent {
     description: row.description,
     playerCapacity: row.player_capacity,
     requestedCapacity: row.requested_capacity,
+    registrationsPaused: row.registrations_paused ?? false,
     status: row.status,
     startsAt: row.starts_at,
     endsAt: row.ends_at,
@@ -628,6 +631,15 @@ export async function closeOrganiserEvent(eventId: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function setOrganiserRegistrationsPaused(eventId: string, paused: boolean): Promise<void> {
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to change registrations.');
+  const { data, error } = await supabase.from('events').update({ registrations_paused: paused })
+    .eq('id', eventId).eq('created_by', session.user.id).eq('status', 'active').select('id').single();
+  if (error) throw error;
+  if (!data) throw new Error('Registration settings could not be saved.');
+}
+
 export async function requestOrganiserPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
     redirectTo: typeof window === "undefined" ? undefined : window.location.origin + "/organiser/reset-password",
@@ -657,4 +669,16 @@ export async function setRequestedEventCapacity(eventId: string, capacity: numbe
   if (!session) throw new Error('Sign in to change event size.');
   const { error } = await supabase.from('events').update({ requested_capacity: capacity }).eq('id', eventId).eq('created_by', session.user.id).eq('status', 'draft').select('id').single();
   if (error) throw error;
+}
+
+export async function saveOrganiserDraft(input: { id: string; name: string; waypoints: WaypointSetup[]; capacity: number }): Promise<OrganiserEvent> {
+  const name = normalizeRequiredText(input.name, 'Event name');
+  const { session } = await getOrganiserSession();
+  if (!session) throw new Error('Sign in to save organiser events.');
+  const { data, error } = await supabase.rpc('save_organiser_event_draft', {
+    p_event_id: input.id, p_name: name, p_capacity: input.capacity,
+    p_waypoints: input.waypoints.map(point => ({ slot_index: point.slotIndex, latitude: point.latitude, longitude: point.longitude, radius_meters: point.radiusMeters })),
+  });
+  if (error) throw error;
+  return mapEventRow(data as OrganiserEventRow);
 }

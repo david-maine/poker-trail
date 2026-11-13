@@ -1,3 +1,4 @@
+import { COLORS } from "../lib/theme";
 import { Href, router } from "expo-router";
 import { useState } from "react";
 import {
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
   icon: { width: "100%", height: "100%" },
   button: {
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderRadius: 24,
     elevation: 4,
     height: 48,

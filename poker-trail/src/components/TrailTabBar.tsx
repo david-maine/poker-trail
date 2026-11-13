@@ -1,3 +1,4 @@
+import { FONT_FAMILY, getPlayerTabTypography } from "../lib/typography";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,9 +9,7 @@ export default function TrailTabBar({ state, descriptors, navigation }: BottomTa
   const { height, width, fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // The reference screens are 1241 points wide, with each tab taking half.
-  const typographyScale = Math.min(1, (width - insets.left - insets.right) / 1241);
-  const mapFontSize = Math.min(44, 88 * typographyScale);
-  const leaderboardFontSize = Math.min(30, 60 * typographyScale);
+  const { map: mapFontSize, leaderboard: leaderboardFontSize } = getPlayerTabTypography(width - insets.left - insets.right);
   const barHeight = Math.max(56, Math.min(88, height * 0.085), mapFontSize * fontScale * 1.3 + 24);
   return (
     <View style={{ backgroundColor: state.routes[state.index]?.name === "index" ? APP_BACKGROUND_COLOR : TRAIL_WHITE }}>
@@ -58,6 +57,6 @@ const styles = StyleSheet.create({
   tab: { flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, paddingVertical: 10, borderRadius: 18 },
   active: { backgroundColor: APP_BACKGROUND_COLOR },
   inactive: { backgroundColor: TRAIL_WHITE },
-  label: { fontFamily: "RobotoSlab_800ExtraBold", textAlign: "center" },
+  label: { fontFamily: FONT_FAMILY.display, textAlign: "center" },
   pressed: { opacity: 0.8 },
 });

@@ -1,20 +1,16 @@
-import { APP_BACKGROUND_COLOR } from "../lib/theme";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { COLORS, APP_BACKGROUND_COLOR } from "../lib/theme";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 type LoadingScreenProps = {
   accessibilityLabel?: string;
-  spinnerOnly?: boolean;
 };
 
 export default function LoadingScreen({
   accessibilityLabel = "Loading",
-  spinnerOnly = false,
 }: LoadingScreenProps) {
   return (
     <View style={styles.background}>
-      {spinnerOnly ? <ActivityIndicator accessibilityLabel={accessibilityLabel} color="#ffffff" size="large" /> : <Text accessibilityLiveRegion="polite" style={styles.message}>
-        {accessibilityLabel}…
-      </Text>}
+      <ActivityIndicator accessibilityLabel={accessibilityLabel} color={COLORS.surface} size="large" />
     </View>
   );
 }
@@ -27,10 +23,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-  },
-  message: {
-    color: "#ffffff",
-    fontSize: 16,
-    textAlign: "center",
   },
 });

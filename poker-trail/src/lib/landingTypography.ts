@@ -1,12 +1,14 @@
-export const LANDING_INPUT_FONT = "Montserrat_500Medium_Italic";
-export const LANDING_BUTTON_FONT = "RobotoSlab_800ExtraBold";
+import { FONT_FAMILY, FONT_SIZE, getDetailFontSize, getLabelFontSize } from "./typography";
+
+export const LANDING_INPUT_FONT = FONT_FAMILY.detail;
+export const LANDING_BUTTON_FONT = FONT_FAMILY.display;
 
 export function getOrganiserHeadingSize(viewportWidth: number) {
-  return 0.8 * Math.min(30, Math.max(14, 60 * Math.min(viewportWidth - 48, 1072) / 1241));
+  return Math.max(FONT_SIZE.body, 0.8 * Math.min(30, 60 * Math.min(viewportWidth - 48, 1072) / 1241));
 }
 
 export function getOrganiserDetailSize(contentWidth: number) {
-  return 40 * Math.min(Math.max(1, contentWidth), 360) / 1241;
+  return getDetailFontSize(contentWidth);
 }
 
 // The reference artwork's outlined form is approximately 835 design points wide.
@@ -21,4 +23,8 @@ export function getLandingTypography(formWidth: number, fontScale = 1) {
     buttonFontSize,
     minControlHeight: Math.max(inputFontSize * fontScale * 1.25 + 30, buttonFontSize * fontScale * 1.25 + 22),
   };
+}
+
+export function getOrganiserLabelSize(contentWidth: number) {
+  return getLabelFontSize(contentWidth);
 }

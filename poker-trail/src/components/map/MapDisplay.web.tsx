@@ -1,4 +1,4 @@
-import { APP_BACKGROUND_COLOR } from "../../lib/theme";
+import { COLORS, APP_BACKGROUND_COLOR } from "../../lib/theme";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import StatusPill from "../StatusPill";
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   controlIcon: { width: "100%", height: "100%" },
   container: { flex: 1, width: "100%", height: "100%", position: "relative", backgroundColor: APP_BACKGROUND_COLOR },
   map: { width: "100%", height: "100%" },
-  recenter: { position: "absolute", top: 56, left: 16, width: 48, height: 48, borderRadius: 24, backgroundColor: "#ffffff",
+  recenter: { position: "absolute", top: 56, left: 16, width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.surface,
     alignItems: "center", justifyContent: "center", shadowColor: "#000000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4, zIndex: 3 },
   pressed: { opacity: 0.78 },
   disabled: { opacity: 0.45 },

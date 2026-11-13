@@ -1,14 +1,16 @@
+import { FONT_SIZE } from "../lib/typography";
+import { COLORS } from "../lib/theme";
 import { statusPillStyles as styles } from "./statusPillStyles";
 import { Ionicons } from "@expo/vector-icons";
 import { Alert, Platform, Pressable, Text, View } from "react-native";
 
 import { useEventSession } from "../lib/eventSession";
 
-export default function HandSyncStatus({ fontSize = 13 }: { fontSize?: number }) {
+export default function HandSyncStatus({ fontSize = FONT_SIZE.small }: { fontSize?: number }) {
   const { hand, syncingHand, retryHandSync } = useEventSession();
   const error = hand?.lastSubmissionError;
   if (!error || syncingHand) return null;
-  const color = "#b42318";
+  const color = COLORS.danger;
 
   function showDetails() {
     if (!error) return;

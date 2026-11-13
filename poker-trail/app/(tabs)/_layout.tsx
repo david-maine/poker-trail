@@ -1,3 +1,4 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../src/lib/typography";
 import { APP_BACKGROUND_COLOR } from "../../src/lib/theme";
 import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
 import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Medium_Italic";
@@ -101,9 +102,9 @@ const styles = StyleSheet.create({
     backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 24,
   },
-  errorText: {
+  errorText: { ...FONT_WEIGHT.regular,
     color: "#ff8a80",
-    fontSize: 16,
+    ...textMetrics(FONT_SIZE.input),
     textAlign: "center",
   },
 });

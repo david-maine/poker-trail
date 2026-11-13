@@ -1,6 +1,9 @@
+import { COLORS } from "../src/lib/theme";
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../src/lib/typography";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
@@ -367,7 +370,7 @@ export default function AdminScreen() {
           <ActionButton
             disabled={signingIn}
             icon="log-in"
-            label={signingIn ? "Signing in..." : "Sign in"}
+            busy={signingIn} label="Sign in"
             onPress={() => {
               void handleSignIn();
             }}
@@ -449,10 +452,8 @@ export default function AdminScreen() {
                       <ActionButton
                         disabled={togglingEventStatusId !== null}
                         icon={isActive ? "toggle-right" : "toggle-left"}
-                        label={
-                          isTogglingStatus
-                            ? "Updating..."
-                            : isActive
+                        busy={isTogglingStatus}
+                        label={isActive
                               ? "Deactivate"
                               : "Activate"
                         }
@@ -483,10 +484,8 @@ export default function AdminScreen() {
                   <ActionButton
                     disabled={togglingEventStatusId !== null}
                     icon={selectedEvent.status === "active" ? "toggle-right" : "toggle-left"}
-                    label={
-                      togglingEventStatusId === selectedEvent.id
-                        ? "Updating..."
-                        : selectedEvent.status === "active"
+                    busy={togglingEventStatusId === selectedEvent.id}
+                    label={selectedEvent.status === "active"
                           ? "Deactivate"
                           : "Activate"
                     }
@@ -499,7 +498,7 @@ export default function AdminScreen() {
                 <ActionButton
                   disabled={savingEvent}
                   icon="save"
-                  label={savingEvent ? "Saving..." : "Save event"}
+                  busy={savingEvent} label="Save event"
                   onPress={() => {
                     void handleSaveEvent();
                   }}
@@ -573,7 +572,7 @@ export default function AdminScreen() {
                     <ActionButton
                       disabled={savingWaypoint}
                       icon="save"
-                      label={savingWaypoint ? "Saving..." : "Save"}
+                      busy={savingWaypoint} label="Save"
                       onPress={() => {
                         void handleSaveWaypoint();
                       }}
@@ -632,12 +631,14 @@ export default function AdminScreen() {
 
 function ActionButton({
   disabled,
+  busy = false,
   icon,
   label,
   onPress,
   variant,
 }: {
   disabled?: boolean;
+  busy?: boolean;
   icon: FeatherName;
   label: string;
   onPress: () => void;
@@ -645,7 +646,10 @@ function ActionButton({
 }) {
   return (
     <Pressable
-      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy, disabled: !!disabled || busy }}
+      disabled={disabled || busy}
       onPress={onPress}
       style={[
         styles.actionButton,
@@ -655,10 +659,11 @@ function ActionButton({
         disabled ? styles.disabled : null,
       ]}
     >
+      {busy ? <ActivityIndicator accessibilityLabel={label} size="small" color={variant === "primary" ? COLORS.surface : COLORS.primary} /> : <>
       <Feather
         name={icon}
         size={16}
-        color={variant === "primary" ? "#ffffff" : "#1f2937"}
+        color={variant === "primary" ? COLORS.surface : "#1f2937"}
       />
       <Text
         style={[
@@ -668,6 +673,7 @@ function ActionButton({
       >
         {label}
       </Text>
+      </>}
     </Pressable>
   );
 }
@@ -816,15 +822,15 @@ const styles = StyleSheet.create({
   },
   kicker: {
     color: "#0f766e",
-    fontSize: 12,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.caption),
+    ...FONT_WEIGHT.display,
     letterSpacing: 0,
     textTransform: "uppercase",
   },
   title: {
     color: "#111827",
-    fontSize: 34,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.billboard),
+    ...FONT_WEIGHT.display,
     marginTop: 2,
   },
   workspace: {
@@ -837,7 +843,7 @@ const styles = StyleSheet.create({
     flexDirection: "column",
   },
   eventRail: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderColor: "#ded8ce",
     borderRadius: 8,
     borderWidth: 1,
@@ -877,13 +883,13 @@ const styles = StyleSheet.create({
   eventName: {
     color: "#111827",
     flex: 1,
-    fontSize: 16,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.input),
+    ...FONT_WEIGHT.display,
   },
   eventCodeText: {
     color: "#0f766e",
-    fontSize: 13,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.small),
+    ...FONT_WEIGHT.display,
     marginTop: 8,
   },
   detailPane: {
@@ -894,7 +900,7 @@ const styles = StyleSheet.create({
     paddingBottom: 28,
   },
   section: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderColor: "#ded8ce",
     borderRadius: 8,
     borderWidth: 1,
@@ -922,13 +928,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: "#111827",
-    fontSize: 20,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.title),
+    ...FONT_WEIGHT.display,
   },
   subsectionTitle: {
     color: "#111827",
-    fontSize: 17,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.heading),
+    ...FONT_WEIGHT.display,
   },
   formGrid: {
     flexDirection: "row",
@@ -944,17 +950,17 @@ const styles = StyleSheet.create({
   },
   label: {
     color: "#374151",
-    fontSize: 13,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.small),
+    ...FONT_WEIGHT.display,
     marginBottom: 7,
   },
-  input: {
-    backgroundColor: "#ffffff",
+  input: { ...FONT_WEIGHT.regular,
+    backgroundColor: COLORS.surface,
     borderColor: "#c9c2b8",
     borderRadius: 6,
     borderWidth: 1,
     color: "#111827",
-    fontSize: 15,
+    ...textMetrics(FONT_SIZE.body),
     minHeight: 42,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -972,8 +978,8 @@ const styles = StyleSheet.create({
   },
   readOnlyCodeText: {
     color: "#0f766e",
-    fontSize: 18,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.heading),
+    ...FONT_WEIGHT.display,
     letterSpacing: 0,
   },
   metricRow: {
@@ -990,13 +996,13 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: "#111827",
-    fontSize: 18,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.heading),
+    ...FONT_WEIGHT.display,
   },
   metricLabel: {
-    color: "#6b7280",
-    fontSize: 12,
-    fontWeight: "700",
+    color: COLORS.inactive,
+    ...textMetrics(FONT_SIZE.caption),
+    ...FONT_WEIGHT.bold,
     marginTop: 2,
   },
   waypointLayout: {
@@ -1031,12 +1037,12 @@ const styles = StyleSheet.create({
   },
   waypointName: {
     color: "#111827",
-    fontSize: 14,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.display,
   },
-  waypointMeta: {
-    color: "#6b7280",
-    fontSize: 12,
+  waypointMeta: { ...FONT_WEIGHT.regular,
+    color: COLORS.inactive,
+    ...textMetrics(FONT_SIZE.caption),
     marginTop: 2,
   },
   waypointForm: {
@@ -1060,17 +1066,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   actionButtonGhost: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderColor: "#d1d5db",
     borderWidth: 1,
   },
   actionButtonText: {
     color: "#1f2937",
-    fontSize: 14,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.display,
   },
   actionButtonPrimaryText: {
-    color: "#ffffff",
+    color: COLORS.surface,
   },
   iconButton: {
     alignItems: "center",
@@ -1101,8 +1107,8 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     color: "#4b5563",
-    fontSize: 11,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.caption),
+    ...FONT_WEIGHT.display,
   },
   statusBadgeTextActive: {
     color: "#0f766e",
@@ -1113,8 +1119,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     color: "#166534",
-    fontSize: 14,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.bold,
     marginBottom: 10,
     padding: 10,
   },
@@ -1124,14 +1130,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     color: "#991b1b",
-    fontSize: 14,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.bold,
     marginBottom: 10,
     padding: 10,
   },
-  emptyText: {
-    color: "#6b7280",
-    fontSize: 14,
+  emptyText: { ...FONT_WEIGHT.regular,
+    color: COLORS.inactive,
+    ...textMetrics(FONT_SIZE.body),
   },
   centered: {
     alignItems: "center",
@@ -1142,12 +1148,12 @@ const styles = StyleSheet.create({
   },
   blockedTitle: {
     color: "#111827",
-    fontSize: 22,
-    fontWeight: "800",
+    ...textMetrics(FONT_SIZE.price),
+    ...FONT_WEIGHT.display,
   },
-  blockedText: {
+  blockedText: { ...FONT_WEIGHT.regular,
     color: "#4b5563",
-    fontSize: 15,
+    ...textMetrics(FONT_SIZE.body),
     marginTop: 8,
   },
   loginShell: {
@@ -1158,7 +1164,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   loginPanel: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderColor: "#ded8ce",
     borderRadius: 8,
     borderWidth: 1,
@@ -1168,15 +1174,15 @@ const styles = StyleSheet.create({
   },
   loginTitle: {
     color: "#111827",
-    fontSize: 28,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.hero),
+    ...FONT_WEIGHT.display,
     marginBottom: 22,
     marginTop: 4,
   },
   errorText: {
     color: "#b91c1c",
-    fontSize: 14,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.bold,
     marginBottom: 12,
   },
 });

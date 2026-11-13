@@ -1,5 +1,6 @@
+import { getLeaderboardTypography, FONT_FAMILY, FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../src/lib/typography";
 import { CARD_BACK_IMAGE } from "../../src/lib/cardImages";
-import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE, TRAIL_DISPLAY_FONT, TRAIL_BODY_FONT } from "../../src/lib/theme";
+import { COLORS, APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE, TRAIL_DISPLAY_FONT, TRAIL_BODY_FONT } from "../../src/lib/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -24,8 +25,9 @@ export default function LeaderboardScreen() {
   const layout = useResponsiveLayout(false);
   // Preserve narrow-screen typography and cap wide-screen text at half its original maximum.
   const typographyWidth = Math.min(layout.contentWidth, layout.contentMaxWidth / 2);
-  const playerNameSize = 75 * typographyWidth / 1241;
-  const entryDetailSize = 50 * typographyWidth / 1241;
+  const boardTypography = getLeaderboardTypography(typographyWidth, 'player');
+  const playerNameSize = boardTypography.name.fontSize!;
+  const entryDetailSize = boardTypography.detail.fontSize!;
   const cards = getCardRowLayout(Math.min(layout.contentWidth, layout.contentMaxWidth), 5, layout.cardHeight, layout.cardGap);
   const { registrationState } = useEventSession();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
@@ -143,7 +145,7 @@ export default function LeaderboardScreen() {
         <View style={styles.boardContent}>
 
           {loading && visibleEntries.length === 0 ? (
-            <LoadingStatus label="Loading leaderboard" color={TRAIL_INK} spinnerOnly />
+            <LoadingStatus label="Loading leaderboard" color={TRAIL_INK} />
           ) : visibleEntries.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>{errorMessage ? "Unable to load the leaderboard" : "No players have joined yet"}</Text>
@@ -195,7 +197,7 @@ const LeaderboardRow = memo(function LeaderboardRow({ entry, currentUserId, card
                 return (
                   <View key={entry.runId} style={styles.entry}>
                     <View style={styles.entryHeader}>
-                      <Text style={[styles.rankText, { fontSize: playerNameSize, lineHeight: playerNameSize * 1.4 }]}>{entry.leaderboardRank}.</Text>
+                      <Text style={[styles.rankText, { ...textMetrics(playerNameSize) }]}>{entry.leaderboardRank}.</Text>
                       <Text numberOfLines={1} style={[styles.playerName, { fontSize: playerNameSize, lineHeight: playerNameSize * 1.4 }]}>
                         {entry.playerLabel}
                         {isCurrentUser ? " (You)" : ""}
@@ -223,7 +225,7 @@ const LeaderboardRow = memo(function LeaderboardRow({ entry, currentUserId, card
                     </View>
 
                     <View style={styles.metaRow}>
-                      <Text style={[styles.handNameText, { fontSize: entryDetailSize, lineHeight: entryDetailSize * 1.4 }]}>
+                      <Text style={[styles.handNameText, { ...textMetrics(entryDetailSize) }]}>
                         {entry.visitCount === 0 ? "No cards collected" : entry.bestHandName}
                         {" · "}
                         {timeLabel}
@@ -312,7 +314,7 @@ const styles = StyleSheet.create({
   },
   trophyHeader: { backgroundColor: APP_BACKGROUND_COLOR, width: "100%", alignItems: "center", gap: 8 },
   headerLine: {
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     height: 2,
     marginBottom: 8,
     width: "100%",
@@ -327,9 +329,9 @@ const styles = StyleSheet.create({
   },
   rankText: {
     color: TRAIL_INK,
-    fontFamily: "RobotoSlab_800ExtraBold",
-    fontSize: 26,
-    lineHeight: 38,
+    fontFamily: FONT_FAMILY.display,
+    ...textMetrics(FONT_SIZE.display),
+
     marginRight: 8,
     minWidth: 24,
     textAlign: "center",
@@ -337,9 +339,9 @@ const styles = StyleSheet.create({
   playerName: {
     color: TRAIL_INK,
     flex: 1,
-    fontFamily: "RobotoSlab_800ExtraBold",
-    fontSize: 26,
-    lineHeight: 34,
+    fontFamily: FONT_FAMILY.display,
+    ...textMetrics(FONT_SIZE.display),
+
   },
   cardsRow: {
     flexDirection: "row",
@@ -371,9 +373,9 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: "left",
     color: TRAIL_INK,
-    fontFamily: "Montserrat_500Medium_Italic",
-    fontSize: 11,
-    lineHeight: 15,
+    fontFamily: FONT_FAMILY.detail,
+    ...textMetrics(FONT_SIZE.caption),
+
   },
   entryLine: {
     backgroundColor: TRAIL_INK,
@@ -389,27 +391,27 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     color: TRAIL_INK,
-    fontFamily: TRAIL_BODY_FONT,
-    fontSize: 20,
-    fontWeight: "700",
+    fontFamily: FONT_FAMILY.bold,
+    ...textMetrics(FONT_SIZE.title),
+    fontWeight: '400',
     textAlign: "center",
   },
   emptyText: {
     color: TRAIL_INK,
     fontFamily: TRAIL_BODY_FONT,
-    fontSize: 14,
+    ...textMetrics(FONT_SIZE.body),
     textAlign: "center",
     marginTop: 8,
   },
-  errorText: {
+  errorText: { ...FONT_WEIGHT.regular,
     color: TRAIL_INK,
-    fontSize: 16,
+    ...textMetrics(FONT_SIZE.input),
     textAlign: "center",
   },
   errorTextSmall: {
     color: TRAIL_INK,
     fontFamily: TRAIL_BODY_FONT,
-    fontSize: 13,
+    ...textMetrics(FONT_SIZE.small),
     marginBottom: 8,
     textAlign: "center",
   },
@@ -437,6 +439,6 @@ const styles = StyleSheet.create({
   refreshButtonText: {
     color: TRAIL_INK,
     fontFamily: TRAIL_DISPLAY_FONT,
-    fontWeight: "900",
+    fontWeight: '400',
   },
 });

@@ -1,4 +1,5 @@
-import { APP_BACKGROUND_COLOR } from "../../src/lib/theme";
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../src/lib/typography";
+import { COLORS, APP_BACKGROUND_COLOR } from "../../src/lib/theme";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, ScrollView, StyleSheet, View } from "react-native";
@@ -284,12 +285,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   refreshButtonText: {
-    color: "#ffffff",
-    fontWeight: "700",
+    color: COLORS.surface,
+    ...FONT_WEIGHT.bold,
   },
-  errorText: {
+  errorText: { ...FONT_WEIGHT.regular,
     color: "#ff8a80",
-    fontSize: 16,
+    ...textMetrics(FONT_SIZE.input),
     textAlign: "center",
     paddingHorizontal: 24,
   },

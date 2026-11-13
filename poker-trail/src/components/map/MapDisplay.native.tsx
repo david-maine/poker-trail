@@ -1,3 +1,4 @@
+import { COLORS } from "../../lib/theme";
 import React, { useRef } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import MapView, { Circle, Marker, PROVIDER_GOOGLE, Region } from "react-native-maps";
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
   },
   recenterButton: {
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderRadius: 24,
     elevation: 4,
     height: 48,

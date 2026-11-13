@@ -1,3 +1,4 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../lib/typography";
 import type { StyleProp, TextStyle } from 'react-native';
 import { StyleSheet, Text, View } from "react-native";
 
@@ -43,13 +44,13 @@ const styles = StyleSheet.create({
   },
   title: {
     color: "#111827",
-    fontSize: 16,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.input),
+    ...FONT_WEIGHT.display,
   },
-  text: {
+  text: { ...FONT_WEIGHT.regular,
     color: "#4b5563",
-    fontSize: 13,
-    lineHeight: 19,
+    ...textMetrics(FONT_SIZE.small),
+
     marginTop: 6,
   },
 });

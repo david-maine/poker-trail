@@ -1,3 +1,4 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../src/lib/typography";
 import { APP_BACKGROUND_COLOR, TRAIL_INK, TRAIL_WHITE } from "../src/lib/theme";
 import { Montserrat_500Medium_Italic } from "@expo-google-fonts/montserrat/500Medium_Italic";
 import { RobotoSlab_800ExtraBold } from "@expo-google-fonts/roboto-slab/800ExtraBold";
@@ -6,6 +7,7 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -155,15 +157,14 @@ export default function RegisterScreen() {
               <Pressable
                 accessibilityLabel={submitting ? "Joining event" : "Join the hunt"}
                 accessibilityRole="button"
+                accessibilityState={{ busy: submitting, disabled: submitting }}
                 disabled={submitting}
                 onPress={() => {
                   void submit();
                 }}
                 style={[styles.button, { minHeight: controlHeight }, submitting ? styles.buttonDisabled : null]}
               >
-                <Text style={[styles.buttonText, { fontSize: typography.buttonFontSize }]}>
-                  {submitting ? "JOINING..." : "JOIN THE HUNT"}
-                </Text>
+                {submitting ? <ActivityIndicator accessibilityLabel="Joining event" color={TRAIL_INK} /> : <Text style={[styles.buttonText, { fontSize: typography.buttonFontSize }]}>JOIN THE HUNT</Text>}
               </Pressable>
               </View>
             </View>
@@ -222,7 +223,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: TRAIL_WHITE,
     textAlign: "center",
-    fontSize: 18,
+    ...textMetrics(FONT_SIZE.heading),
     fontFamily: LANDING_INPUT_FONT,
     letterSpacing: 0,
   },
@@ -231,8 +232,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: "#ffb4ab",
-    fontSize: 14,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.body),
+    ...FONT_WEIGHT.bold,
     marginBottom: 8,
     textAlign: "center",
   },
@@ -252,7 +253,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: TRAIL_INK,
-    fontSize: 22,
+    ...textMetrics(FONT_SIZE.price),
     fontFamily: LANDING_BUTTON_FONT,
     textAlign: "center",
   },

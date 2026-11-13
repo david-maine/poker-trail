@@ -21,6 +21,7 @@ async function setup({ status = 'active', capacity = 50, requestedCapacity = cap
     'expo-router': { useLocalSearchParams: () => ({}), useRouter: () => ({ push: path => calls.push(['navigate', path]) }) },
     '@expo/vector-icons/Feather': { default: 'Icon' },
     'expo-font': { useFonts: () => [true] },
+    '@expo-google-fonts/roboto-slab/400Regular': {},
     '@expo-google-fonts/roboto-slab/600SemiBold': {},
     '@expo-google-fonts/roboto-slab/700Bold': {},
     '../../lib/organiser': { setRequestedEventCapacity: async (...args) => calls.push(['capacity', ...args]), publishOrganiserEvent: async id => calls.push(['publish', id]) },

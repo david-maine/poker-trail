@@ -1,6 +1,8 @@
+import { COLORS } from "../../lib/theme";
+import { TEXT_STYLE, FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../lib/typography";
 import type { StyleProp, TextStyle } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { WaypointMapPoint, WaypointMapWaypoint } from "./OrganiserWaypointMap";
 
@@ -220,10 +222,10 @@ export default function OrganiserWaypointMap({
       const marker = new mapsApi.Marker({
         clickable: true,
         draggable: isSelected,
-        icon: createMarkerIcon(mapsApi, isSelected ? "#0f766e" : "#6b7280"),
+        icon: createMarkerIcon(mapsApi, isSelected ? "#0f766e" : COLORS.inactive),
         label: {
-          color: "#ffffff",
-          fontWeight: "900",
+          color: COLORS.surface,
+          ...FONT_WEIGHT.display,
           text: String(waypoint.sortOrder + 1),
         },
         map,
@@ -248,8 +250,8 @@ export default function OrganiserWaypointMap({
         draggable: true,
         icon: createMarkerIcon(mapsApi, "#0f766e"),
         label: {
-          color: "#ffffff",
-          fontWeight: "900",
+          color: COLORS.surface,
+          ...FONT_WEIGHT.display,
           text: String(selectedSlotIndex + 1),
         },
         map,
@@ -291,11 +293,11 @@ export default function OrganiserWaypointMap({
       const circle = new mapsApi.Circle({
         clickable: false,
         center: toGooglePoint(isSelected && currentPoint ? currentPoint : waypoint),
-        fillColor: isSelected ? "#0f766e" : "#6b7280",
+        fillColor: isSelected ? "#0f766e" : COLORS.inactive,
         fillOpacity: isSelected ? 0.14 : 0.08,
         map,
         radius: isSelected && currentPoint ? radiusMeters : waypoint.radiusMeters,
-        strokeColor: isSelected ? "#0f766e" : "#6b7280",
+        strokeColor: isSelected ? "#0f766e" : COLORS.inactive,
         strokeOpacity: isSelected ? 0.8 : 0.38,
         strokeWeight: isSelected ? 2 : 1,
       });
@@ -380,19 +382,20 @@ export default function OrganiserWaypointMap({
       />
       {!mapsApi ? (
         <View pointerEvents="none" style={styles.loadingOverlay}>
-          <Text style={[styles.loadingText, textStyle]}>Loading map...</Text>
+          <ActivityIndicator accessibilityLabel="Loading map" color={COLORS.primary} />
         </View>
       ) : null}
       {mapsApi ? (
         <View style={styles.locationControl}>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Use my location"
+            accessibilityState={{ busy: isLocating, disabled: isLocating }}
             disabled={isLocating}
             onPress={requestUserLocation}
             style={[styles.locationButton, isLocating ? styles.locationButtonDisabled : null]}
           >
-            <Text style={[styles.locationButtonText, textStyle]}>
-              {isLocating ? "Locating..." : "Use my location"}
-            </Text>
+            {isLocating ? <ActivityIndicator accessibilityLabel="Finding your location" size="small" color={COLORS.primary} /> : <Text style={[textStyle, styles.locationButtonText]}>Use my location</Text>}
           </Pressable>
           {locationMessage ? <Text style={[styles.locationMessage, textStyle]}>{locationMessage}</Text> : null}
         </View>
@@ -438,7 +441,7 @@ function createMarkerIcon(mapsApi: GoogleMapsApi, color: string) {
     fillOpacity: 1,
     path: mapsApi.SymbolPath.CIRCLE,
     scale: 14,
-    strokeColor: "#ffffff",
+    strokeColor: COLORS.surface,
     strokeWeight: 3,
   };
 }
@@ -469,14 +472,9 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  loadingText: {
-    color: "#374151",
-    fontSize: 14,
-    fontWeight: "800",
-  },
   locationButton: {
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: COLORS.surface,
     borderColor: "#c9c2b8",
     borderRadius: 6,
     borderWidth: 1,
@@ -488,9 +486,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   locationButtonText: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "900",
+    ...TEXT_STYLE.button,
+    color: COLORS.primary,
   },
   locationControl: {
     gap: 6,
@@ -505,9 +502,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     color: "#9a3412",
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 17,
+    ...textMetrics(FONT_SIZE.caption),
+    ...FONT_WEIGHT.bold,
+
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
@@ -522,13 +519,13 @@ const styles = StyleSheet.create({
   },
   messageTitle: {
     color: "#111827",
-    fontSize: 16,
-    fontWeight: "900",
+    ...textMetrics(FONT_SIZE.input),
+    ...FONT_WEIGHT.display,
   },
-  messageText: {
+  messageText: { ...FONT_WEIGHT.regular,
     color: "#4b5563",
-    fontSize: 13,
-    lineHeight: 19,
+    ...textMetrics(FONT_SIZE.small),
+
     marginTop: 6,
   },
 });

@@ -1,5 +1,6 @@
 import { StyleSheet } from "react-native";
 import { TRAIL_WHITE } from "../lib/theme";
+import { FONT_WEIGHT } from '../lib/typography';
 
 export const statusPillStyles = StyleSheet.create({
   pill: {
@@ -11,7 +12,7 @@ export const statusPillStyles = StyleSheet.create({
   error: { backgroundColor: "#fff3f0", borderColor: "#edb4aa" },
   offline: { backgroundColor: "#fff7df", borderColor: "#e6ce92" },
   status: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 6, paddingVertical: 6, minHeight: 44, flexShrink: 1 },
-  text: { fontWeight: "600", flexShrink: 1 },
+  text: { ...FONT_WEIGHT.medium, flexShrink: 1 },
   retry: { minHeight: 44, justifyContent: "center", paddingHorizontal: 10, paddingVertical: 6, borderLeftWidth: 1, borderLeftColor: "#d7d7d7" },
   disabled: { opacity: 0.4 },
 });

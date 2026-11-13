@@ -1,3 +1,6 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../src/lib/typography";
+import { useFonts } from 'expo-font';
+import { APP_FONTS } from '../src/lib/fonts';
 import { APP_BACKGROUND_COLOR } from "../src/lib/theme";
 import { Stack, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
@@ -10,6 +13,7 @@ import { loadRegistrationState } from "../src/lib/game";
 import { supabase } from "../src/lib/supabase";
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts(APP_FONTS);
   const segments = useSegments();
   const isStandaloneRoute = segments[0] === "admin" || segments[0] === "organiser";
   const [ready, setReady] = useState(false);
@@ -80,6 +84,10 @@ export default function RootLayout() {
     };
   }, [isStandaloneRoute]);
 
+  if (!fontsLoaded && !fontError) {
+    return <LoadingScreen accessibilityLabel="Loading fonts" />;
+  }
+
   if (isStandaloneRoute) {
     return (
       <Stack>
@@ -90,7 +98,7 @@ export default function RootLayout() {
   }
 
   if (!ready) {
-    return <LoadingScreen accessibilityLabel="Loading app" spinnerOnly />;
+    return <LoadingScreen accessibilityLabel="Loading app" />;
   }
 
   if (errorMsg || !initialRouteName || !registrationState) {
@@ -122,9 +130,9 @@ const styles = StyleSheet.create({
     backgroundColor: APP_BACKGROUND_COLOR,
     paddingHorizontal: 24,
   },
-  errorText: {
+  errorText: { ...FONT_WEIGHT.regular,
     color: "#ff6b6b",
-    fontSize: 16,
+    ...textMetrics(FONT_SIZE.input),
     textAlign: "center",
   },
 });

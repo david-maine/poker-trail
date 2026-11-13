@@ -1,3 +1,4 @@
+import { FONT_SIZE, FONT_WEIGHT, textMetrics } from "../../lib/typography";
 import { CARD_BACK_IMAGE } from "../../lib/cardImages";
 import React, { useState } from "react";
 import { Image, View, Text, StyleSheet, ScrollView, useWindowDimensions } from "react-native";
@@ -80,7 +81,7 @@ const styles = StyleSheet.create({
   },
   pendingText: {
     color: "#e7f7ff",
-    fontSize: 13,
-    fontWeight: "700",
+    ...textMetrics(FONT_SIZE.small),
+    ...FONT_WEIGHT.bold,
   },
 });
