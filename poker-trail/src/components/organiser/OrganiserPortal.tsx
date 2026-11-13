@@ -53,6 +53,7 @@ export function PortalLayout() {
   const { width } = useWindowDimensions();
   const characterWidth = Math.min(100, Math.max(64, width * 0.2)) * 0.5;
   const pathname = usePathname();
+  const isAccountPage = ['/organiser/sign-in', '/organiser/sign-up'].includes(pathname.replace(/\/$/, ''));
   const router = useRouter();
   const [dashboard, setDashboard] = useState<OrganiserDashboard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,8 +84,8 @@ export function PortalLayout() {
     if (!loading && !error && !dashboard && !isAuth) router.replace({ pathname: "/organiser/sign-in", params: { next: pathname } } as Href);
   }, [dashboard, loading, error, isAuth, pathname, router]);
   if (Platform.OS !== "web") return <View style={styles.page}><Text style={TEXT_STYLE.body}>Open /organiser in your browser to manage events.</Text></View>;
-  return <Context.Provider value={{ dashboard, refresh, recovery }}><ScrollView style={[styles.background, pathname.replace(/\/$/, '') === '/organiser/sign-in' && styles.signInBackground]} keyboardShouldPersistTaps="handled">
-    {pathname.replace(/\/$/, '') !== '/organiser/sign-in' && <View style={styles.banner}><View style={styles.bannerInner}>
+  return <Context.Provider value={{ dashboard, refresh, recovery }}><ScrollView style={[styles.background, isAccountPage && styles.accountBackground]} keyboardShouldPersistTaps="handled">
+    {!isAccountPage && <View style={styles.banner}><View style={styles.bannerInner}>
       {dashboard && <Pressable accessibilityRole="button" accessibilityLabel="Sign out" hitSlop={6} onPress={() => { void signOutOrganiser().then(() => { setDashboard(null); router.replace('/organiser/sign-in' as Href); }).catch(e => setError(reason(e))); }} style={({ pressed }) => [styles.iconButton, styles.logout, pressed && styles.logoutPressed]}>
         <Image accessible={false} source={require('../../../assets/images/POKER-TRAIL-icon-exit.png')} resizeMode="contain" style={styles.logoutIcon} />
       </Pressable>}
@@ -116,13 +117,11 @@ export function AuthPage() {
     } catch (e) { setError(reason(e)); } finally { setBusy(false); }
   }
   return <View style={styles.authShell}>
-    {signup && <Text accessibilityRole="header" style={styles.eventsTitle}>Create organiser account</Text>}
-    {!signup && <Image accessibilityRole="image" accessibilityLabel="Poker Trail" source={require('../../../assets/images/POKER-TRAIL-horizontal.png')} resizeMode="contain" style={{ width: logoWidth, height: logoWidth / 2, alignSelf: 'center' }} />}
-    <Panel style={!signup && styles.authPanel}>
-      {!signup && <Text accessibilityRole="header" style={[styles.eventsTitle, styles.authTitle]}>Organiser sign in</Text>}
-      <Text style={styles.authCopy}>Plan your route, publish your event and follow player progress.</Text>
-      <Field label="Email" value={email} onChangeText={setEmail} disabled={busy} labelStyle={styles.authLabel} inputStyle={!signup && styles.authInput} />
-      <Field label="Password" value={password} onChangeText={setPassword} password disabled={busy} labelStyle={styles.authLabel} inputStyle={!signup && styles.authInput} />
+    <Image accessibilityRole="image" accessibilityLabel="Poker Trail" source={require('../../../assets/images/POKER-TRAIL-horizontal.png')} resizeMode="contain" style={{ width: logoWidth, height: logoWidth / 2, alignSelf: 'center' }} />
+    <Panel style={styles.authPanel}>
+      <Text accessibilityRole="header" style={[styles.eventsTitle, styles.authTitle]}>{signup ? 'Create organiser account' : 'Organiser sign in'}</Text>
+      <Field label="Email" value={email} onChangeText={setEmail} disabled={busy} labelStyle={styles.authLabel} inputStyle={styles.authInput} />
+      <Field label="Password" value={password} onChangeText={setPassword} password disabled={busy} labelStyle={styles.authLabel} inputStyle={styles.authInput} />
       <Feedback text={error} />
       <Button style={styles.authSubmit} busy={busy} title={signup ? 'Create account' : 'Sign in'} disabled={busy} onPress={() => void submit()} />
       <View style={styles.authLinks}>
@@ -525,11 +524,10 @@ const characterAspectRatio = 1199 / 1312;
 
 const styles = StyleSheet.create({
   authShell: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: 16, marginTop: 16 },
-  signInBackground: { backgroundColor: COLORS.brand },
+  accountBackground: { backgroundColor: COLORS.brand },
   authPanel: { padding: 20, gap: 10 },
   authInput: { minHeight: 44, paddingVertical: 10 },
   authTitle: { textAlign: 'center' },
-  authCopy: { ...TEXT_STYLE.body, color: COLORS.muted },
   authLabel: { color: COLORS.muted },
   authSubmit: { alignSelf: 'stretch', alignItems: 'center' },
   authLinks: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: 16, rowGap: 12 },
